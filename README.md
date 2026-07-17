@@ -54,3 +54,11 @@ Para compilar el código fuente y generar tu propia ROM ejecutable (`.bin`), nec
 ```bash
    git clone https://github.com/Retroplayingbcn/flickis-escape.git
 ```
+Abre tu terminal de comandos en la carpeta raíz del proyecto.
+
+Ejecuta la herramienta de compilación de SGDK:
+
+```Bash
+%GDK%\bin\make -f %GDK%\makefile.gen
+```
+Encontrarás la ROM final lista para emular en out/rom.bin.
