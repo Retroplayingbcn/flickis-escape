@@ -3,18 +3,23 @@
 [![Platform: Sega Mega Drive](https://img.shields.io/badge/Platform-Sega%20Mega%20Drive-blue.svg)](https://en.wikipedia.org/wiki/Sega_Genesis)
 [![Language: C](https://img.shields.io/badge/Language-C-green.svg)](https://en.wikipedia.org/wiki/C_(programming_language))
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Play on itch.io](https://img.shields.io/badge/Play-itch.io-fa5c5c.svg)](https://yupikaie.itch.io/flickies-escape)
+[![Blog](https://img.shields.io/badge/Blog-RetroPlayingBCN-1a1a2e.svg)](https://www.retroplayingbcn.es/2026/07/flickis-escape-mega-drive-ia.html)
 
-**Flicki's Escape** es un videojuego homebrew completamente original desarrollado para la legendaria consola de 16 bits **SEGA Mega Drive / Genesis**. 
+**Flicki's Escape** es un videojuego homebrew completamente original desarrollado para la legendaria consola de 16 bits **SEGA Mega Drive / Genesis**.
 
 El proyecto nace como un cariñoso tributo que fusiona las mecánicas de recolección de *Flicky* con la tensión laberíntica de persecución de *Pac-Man*. Lo más destacado de este desarrollo es que **el 100% del código fuente en C ha sido estructurado, depurado y optimizado mediante la colaboración directa con modelos de Inteligencia Artificial**.
+
+📝 Puedes leer el making-of completo del proyecto en **[RetroPlayingBCN](https://www.retroplayingbcn.es/2026/07/flickis-escape-mega-drive-ia.html)**, y jugar la última build directamente en **[itch.io](https://yupikaie.itch.io/flickies-escape)**.
 
 ---
 
 ## 🤖 El Hito Tecnológico: Desarrollo Guiado por IA
 
-Programar para hardware de 1989 (procesador Motorola 68000) impone severas restricciones: gestión manual de memoria RAM, paletas de color limitadas y gestión estricta de sprites para evitar parpadeos. 
+Programar para hardware de 1989 (procesador Motorola 68000) impone severas restricciones: gestión manual de memoria RAM, paletas de color limitadas y gestión estricta de sprites para evitar parpadeos.
 
 Este repositorio demuestra cómo una IA puede comprender arquitecturas de hardware retro y diseñar código optimizado en C bajo el kit **SGDK**:
+
 *   **Físicas de colisión por tiles:** Rutinas de colisión píxel a píxel adaptadas a rejillas de 8x8.
 *   **Algoritmo BFS (Breadth-First Search):** Implementación de una búsqueda en anchura optimizada en memoria para que la CPU del cazador persiga al jugador de forma inteligente.
 *   **Generación Procedimental:** Creación aleatoria de mapas garantizando que todos los elementos sean alcanzables mediante análisis topológico en tiempo real.
@@ -32,10 +37,24 @@ Este repositorio demuestra cómo una IA puede comprender arquitecturas de hardwa
 
 ---
 
+## 🔗 Enlaces
+
+*   🎮 **Jugar / descargar:** [itch.io](https://yupikaie.itch.io/flickies-escape)
+*   📝 **Artículo del desarrollo:** [RetroPlayingBCN](https://www.retroplayingbcn.es/2026/07/flickis-escape-mega-drive-ia.html)
+*   🌐 **Más contenido retro:** [retroplayingbcn.es](https://www.retroplayingbcn.es)
+
+---
+
 ## 🛠️ Cómo Compilar el Proyecto
 
 Para compilar el código fuente y generar tu propia ROM ejecutable (`.bin`), necesitarás tener configurado el **Sega Genesis Development Kit (SGDK)** de Stephane Dallongeville.
 
 1. Clona este repositorio en tu máquina local:
-   ```bash
+
+```bash
    git clone https://github.com/Retroplayingbcn/flickis-escape.git
+```
+
+Solo te falta pegarlo en el `README.md` del repo y hacer commit. Y no olvides el paso del campo **Website** en "About" del repo (ícono ⚙️) que comentamos antes — ese es un enlace extra independiente del README.
+
+¿Quieres que sigamos ahora con el README de perfil de la organización (`Retroplayingbcn/.github/profile/README.md`)?
