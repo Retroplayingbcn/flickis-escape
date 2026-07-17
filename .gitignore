@@ -1,0 +1,18 @@
+# Temporales de compilación de SGDK
+out/
+bin/
+obj/
+
+# Archivos de depuración y símbolos
+*.o
+*.out
+*.bin
+symbol.txt
+
+# Archivos de configuración de editores comunes
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
