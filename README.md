@@ -38,4 +38,4 @@ Para compilar el código fuente y generar tu propia ROM ejecutable (`.bin`), nec
 
 1. Clona este repositorio en tu máquina local:
    ```bash
-   git clone [https://github.com/Retroplayingbcn/flickis-escape.git](https://github.com/Retroplayingbcn/flickis-escape.git)
+   git clone https://github.com/Retroplayingbcn/flickis-escape.git
