@@ -54,7 +54,3 @@ Para compilar el código fuente y generar tu propia ROM ejecutable (`.bin`), nec
 ```bash
    git clone https://github.com/Retroplayingbcn/flickis-escape.git
 ```
-
-Solo te falta pegarlo en el `README.md` del repo y hacer commit. Y no olvides el paso del campo **Website** en "About" del repo (ícono ⚙️) que comentamos antes — ese es un enlace extra independiente del README.
-
-¿Quieres que sigamos ahora con el README de perfil de la organización (`Retroplayingbcn/.github/profile/README.md`)?
