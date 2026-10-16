@@ -102,10 +102,14 @@ void fx_scroll_actualizar() {
     if (!scroll_lineas) return;
     static const s8 ola[32] = { 0,0,1,1,1,1,1,0, 0,0,0,-1,-1,-1,-1,-1, 0,0,1,1,1,1,1,0, 0,0,0,-1,-1,-1,-1,-1 };
     bool agua = (mundo_actual == MUNDO_MARINO);
-    u16 f = frame_counter >> 2;
+    bool calor = (mundo_actual == MUNDO_VOLCAN);       // el aire caliente hace temblar el suelo, muy suave
+    u16 f = frame_counter >> 2, fc = frame_counter >> 3;
     for (u16 y = PLAY_Y; y < 224; y++) {
         tabla_a[y] = shake_x;
-        tabla_b[y] = shake_x + (agua ? ola[((y >> 2) + f) & 31] : 0);
+        s16 o = 0;
+        if (agua) o = ola[((y >> 2) + f) & 31];
+        else if (calor && ((y + fc) & 7) < 2) o = ((y >> 3) + fc) & 1 ? 1 : -1;
+        tabla_b[y] = shake_x + o;
     }
     VDP_setHorizontalScrollLine(BG_A, 0, tabla_a, 224, DMA_QUEUE);
     VDP_setHorizontalScrollLine(BG_B, 0, tabla_b, 224, DMA_QUEUE);
@@ -131,22 +135,39 @@ void fx_fundido_entrada() {
 // ------------------------------------------------------------------ cartel centrado
 #define TILE_HUD_FONDO 96     // tiles sueltos al final del tileset del laberinto
 #define TILE_HUD_BORDE 97
-void banner(const char* txt) {
-    u16 len = strlen(txt);
-    u16 x0 = (40 - len) / 2 - 2, x1 = x0 + len + 3;
-    // arriba o abajo, para no tapar al protagonista
-    u16 yc = ((flicky.y + PLAY_Y) >> 3) < 15 ? 21 : 7;
-    for (u16 y = yc - 1; y <= yc + 1; y++) {
+static void banner_caja(u16 ancho, u16 yc, u16 alto) {
+    u16 x0 = (40 - ancho) / 2 - 2, x1 = x0 + ancho + 3;
+    for (u16 y = yc - 1; y <= yc + alto; y++) {
         for (u16 x = x0; x <= x1; x++) {
             u16 attr = TILE_ATTR_FULL(PAL0, 1, 0, 0, base_maze + TILE_HUD_FONDO);
-            if (y == yc + 1) attr = TILE_ATTR_FULL(PAL0, 1, 0, 0, base_maze + TILE_HUD_BORDE);
+            if (y == yc + alto) attr = TILE_ATTR_FULL(PAL0, 1, 0, 0, base_maze + TILE_HUD_BORDE);
             if (y == yc - 1) attr = TILE_ATTR_FULL(PAL0, 1, 1, 0, base_maze + TILE_HUD_BORDE);
             VDP_setTileMapXY(BG_B, attr, x, y);
             VDP_setTileMapXY(BG_A, 0, x, y);
         }
     }
+}
+
+static u16 banner_fila() { return ((flicky.y + PLAY_Y) >> 3) < 15 ? 20 : 6; }   // arriba o abajo, sin tapar a Flicki
+
+void banner(const char* txt) {
+    u16 len = strlen(txt);
+    u16 yc = banner_fila() + 1;
+    banner_caja(len, yc, 1);
     VDP_setTextPalette(PAL0);
     VDP_setTextPriority(1);
     VDP_drawText(txt, (40 - len) / 2, yc);
+    VDP_setTextPriority(0);
+}
+
+// cartel de dos líneas (la segunda puede ir vacía para hacerla parpadear)
+void banner_doble(const char* a, const char* b) {
+    u16 la = strlen(a), lb = strlen(b);
+    u16 yc = banner_fila();
+    banner_caja(la > lb ? la : lb, yc, 3);
+    VDP_setTextPalette(PAL0);
+    VDP_setTextPriority(1);
+    VDP_drawText(a, (40 - la) / 2, yc);
+    if (lb) VDP_drawText(b, (40 - lb) / 2, yc + 2);
     VDP_setTextPriority(0);
 }

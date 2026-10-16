@@ -58,21 +58,22 @@ static void menu_principal(u16 pulsado) {
 
 static void menu_versus(u16 pulsado) {
     if (pulsado & BUTTON_UP)        { if (versus_sel > 0) versus_sel--; }
-    else if (pulsado & BUTTON_DOWN) { if (versus_sel < 4) versus_sel++; }
+    else if (pulsado & BUTTON_DOWN) { if (versus_sel < 5) versus_sel++; }
     else if (pulsado & (BUTTON_LEFT | BUTTON_A | BUTTON_RIGHT | BUTTON_B)) {
         bool mas = (pulsado & (BUTTON_RIGHT | BUTTON_B)) != 0;
         switch (versus_sel) {
             case 0: modo_battle_royale = !modo_battle_royale; break;
-            case 1: if (mas) { if (versus_tiempo_idx < 3) versus_tiempo_idx++; } else if (versus_tiempo_idx > 0) versus_tiempo_idx--; break;
-            case 2: if (mas) { if (versus_victorias_req < 5) versus_victorias_req += 2; } else if (versus_victorias_req > 1) versus_victorias_req -= 2; break;
-            case 3: versus_mundo_idx = mas ? (versus_mundo_idx + 1) % 5 : (versus_mundo_idx + 4) % 5; break;
-            case 4: sonido(SFX_CLICK); ir_al_menu(); return;
+            case 1: versus_papeles = mas ? (versus_papeles + 1) % 3 : (versus_papeles + 2) % 3; break;
+            case 2: if (mas) { if (versus_tiempo_idx < 3) versus_tiempo_idx++; } else if (versus_tiempo_idx > 0) versus_tiempo_idx--; break;
+            case 3: if (mas) { if (versus_victorias_req < 5) versus_victorias_req += 2; } else if (versus_victorias_req > 1) versus_victorias_req -= 2; break;
+            case 4: versus_mundo_idx = mas ? (versus_mundo_idx + 1) % 5 : (versus_mundo_idx + 4) % 5; break;
+            case 5: sonido(SFX_CLICK); ir_al_menu(); return;
         }
     } else if (pulsado & BUTTON_START) {
         sonido(SFX_CLICK);
-        if (versus_sel == 4) { ir_al_menu(); return; }
+        if (versus_sel == 5) { ir_al_menu(); return; }
         victorias_j1 = 0; victorias_j2 = 0;
-        versus_ronda = 1; p1_es_pajaro = TRUE;
+        versus_ronda = 1; p1_es_pajaro = (versus_papeles != 1);
         resetear_tiempo_nivel();
         max_polluelos_nivel = 10;
         mundo_actual = (versus_mundo_idx == 4) ? (random() % 4) : versus_mundo_idx;

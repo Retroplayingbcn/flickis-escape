@@ -6,13 +6,40 @@ bool alcanzable[MAP_HEIGHT][MAP_WIDTH];
 u8 distancia[MAP_HEIGHT][MAP_WIDTH];
 u8 deco[MAP_HEIGHT][MAP_WIDTH];
 
-#define META_DECO 32          // en el tileset del suelo: 32 metatiles de suelo y luego 5 adornos
+#define META_DECO    32       // en el tileset del suelo: 32 metatiles de suelo, 6 adornos,
+#define META_DOBLADO 38       //   2 adornos doblados por el viento
+#define META_CAMINO  40       //   y 16 piezas de camino de tierra (bosque)
+#define TILE_CLARO   98       // en el tileset del bosque, tras los 98 tiles normales: piezas del claro
+
+// los árboles y el tronco del claro no proyectan la sombra cuadrada de los setos
+static bool da_sombra(s16 x, s16 y) {
+    if (!hay_muro(x, y)) return FALSE;
+    if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) return TRUE;
+    u8 d = deco[y][x];
+    return !(d & DECO_ESPECIAL) || (d & 7) >= PIEZA_FOLLAJE1;
+}
+
+static bool camino(s16 x, s16 y) {
+    if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) return FALSE;
+    return deco[y][x] == DECO_CAMINO;
+}
 u16 base_maze, base_floor, base_items, base_hud;
 
 static const Palette* pal_maze_actual = &pal_bosque_maze;
 static const Palette* pal_floor_actual = &pal_bosque_floor;
 static s16 cola_x[MAP_WIDTH * MAP_HEIGHT], cola_y[MAP_WIDTH * MAP_HEIGHT];
 static u16 nivel_alerta = 0;
+static const TileSet* ts_floor_actual = &ts_bosque_floor;
+
+bool muros_en_alerta() { return nivel_alerta != 0; }
+
+// ráfaga de viento (bosque): las flores y la hierba del suelo se doblan cambiando sus tiles en VRAM
+void deco_viento(bool doblado) {
+    if (mundo_actual != MUNDO_BOSQUE) return;
+    const u32* t = ts_floor_actual->tiles;
+    VDP_loadTileData(t + (doblado ? META_DOBLADO : META_DECO) * 4 * 8, base_floor + META_DECO * 4, 4, DMA);
+    VDP_loadTileData(t + (doblado ? META_DOBLADO + 1 : META_DECO + 2) * 4 * 8, base_floor + (META_DECO + 2) * 4, 4, DMA);
+}
 
 #define META_NIDO 16          // metatiles 16..23: nido con 0..3 huevos (izquierda, derecha)
 static const s16 dx4[4] = { 1, -1, 0, 0 };
@@ -93,22 +120,63 @@ void generar_mapa_aleatorio() {
         for (s16 x = 0; x < 10; x++) mapa[y][MAP_WIDTH - 1 - x] = mapa[y][x];
     for (s16 x = 0; x < MAP_WIDTH; x++) { mapa[0][x] = TILE_MURO; mapa[MAP_HEIGHT - 1][x] = TILE_MURO; }
     for (s16 y = 0; y < MAP_HEIGHT; y++) { mapa[y][0] = TILE_MURO; mapa[y][MAP_WIDTH - 1] = TILE_MURO; }
-    decorar(8);
+    decorar(mundo_actual == MUNDO_VOLCAN ? 12 : 9, FALSE);
 }
 
-// adornos del suelo al azar (no estorban: solo se dibujan)
-void decorar(u16 n) {
+// adornos del suelo al azar (no estorban: solo se dibujan). Los dos últimos del bosque y del volcán
+// tienen volumen (tocón, roca...): en un pasillo parecerían un muro, así que solo van en la arena.
+static u16 adornos_planos() { return (mundo_actual == MUNDO_BOSQUE || mundo_actual == MUNDO_VOLCAN) ? 4 : 6; }
+
+void decorar(u16 n, bool volumen) {
     memset(deco, 0, sizeof(deco));
+    u16 tipos = volumen ? 6 : adornos_planos();
     for (u16 i = 0, intentos = 0; i < n && intentos < 200; intentos++) {
         s16 x = (random() % (MAP_WIDTH - 2)) + 1, y = (random() % (MAP_HEIGHT - 2)) + 1;
         if (mapa[y][x] != TILE_SUELO || en_zona_nido(x, y) || deco[y][x] || (x <= 2 && y <= 2)) continue;
-        deco[y][x] = 1 + (random() % 5);
+        deco[y][x] = 1 + (random() % tipos);
         i++;
     }
 }
 
-// Arena del jefe: espacio abierto con columnas para cubrirse
+static void pieza(s16 x, s16 y, u8 p) { mapa[y][x] = TILE_MURO; deco[y][x] = DECO_ESPECIAL | p; }
+
+static void arbol(s16 x, s16 y) {
+    pieza(x, y, PIEZA_ARBOL_TL); pieza(x + 1, y, PIEZA_ARBOL_TR);
+    pieza(x, y + 1, PIEZA_ARBOL_BL); pieza(x + 1, y + 1, PIEZA_ARBOL_BR);
+}
+
+// Arena del bosque: un claro rodeado de árboles, con un cruce de caminos de tierra,
+// dos árboles grandes y un tronco caído (el mismo espacio libre que las otras arenas)
+static void generar_claro() {
+    memset(deco, 0, sizeof(deco));
+    for (s16 y = 0; y < MAP_HEIGHT; y++)
+        for (s16 x = 0; x < MAP_WIDTH; x++) {
+            bool borde = (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1);
+            if (borde) pieza(x, y, ((x + y) & 1) ? PIEZA_FOLLAJE1 : PIEZA_FOLLAJE2);
+            else mapa[y][x] = TILE_SUELO;
+        }
+    for (s16 x = 1; x < MAP_WIDTH - 1; x++) deco[6][x] = DECO_CAMINO;
+    for (s16 y = 1; y < MAP_HEIGHT - 1; y++) deco[y][9] = DECO_CAMINO;
+    if (random() & 1) { arbol(4, 2); arbol(14, 8); pieza(12, 3, PIEZA_TRONCO_I); pieza(13, 3, PIEZA_TRONCO_D); }
+    else              { arbol(4, 8); arbol(14, 2); pieza(4, 3, PIEZA_TRONCO_I); pieza(5, 3, PIEZA_TRONCO_D); }
+    // flores y hierba a lo largo del borde, y algún adorno con volumen en lo abierto
+    for (s16 y = 1; y < MAP_HEIGHT - 1; y++)
+        for (s16 x = 1; x < MAP_WIDTH - 1; x++) {
+            if (mapa[y][x] != TILE_SUELO || deco[y][x]) continue;
+            bool junto_borde = (x == 1 || y == 1 || x == MAP_WIDTH - 2 || y == MAP_HEIGHT - 2);
+            if (junto_borde && (random() % 100) < 55) deco[y][x] = 1 + (random() % 4);
+        }
+    for (u16 i = 0, intentos = 0; i < 4 && intentos < 100; intentos++) {
+        s16 x = 2 + (random() % (MAP_WIDTH - 4)), y = 2 + (random() % (MAP_HEIGHT - 4));
+        if (mapa[y][x] != TILE_SUELO || deco[y][x] || (x <= 3 && y >= 5 && y <= 7)) continue;
+        deco[y][x] = 5 + (random() & 1);
+        i++;
+    }
+}
+
+// Arena del jefe: espacio abierto con columnas para cubrirse (en el bosque, un claro con árboles)
 void generar_arena() {
+    if (mundo_actual == MUNDO_BOSQUE) { generar_claro(); return; }
     for (s16 y = 0; y < MAP_HEIGHT; y++)
         for (s16 x = 0; x < MAP_WIDTH; x++)
             mapa[y][x] = (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1) ? TILE_MURO : TILE_SUELO;
@@ -120,7 +188,7 @@ void generar_arena() {
     };
     u16 d = random() % 3;
     for (u16 i = 0; i < 10 && disp[d][i][0] >= 0; i++) mapa[(u16)disp[d][i][1]][(u16)disp[d][i][0]] = TILE_MURO;
-    decorar(10);
+    decorar(12, TRUE);
 }
 
 // ------------------------------------------------------------------ recorridos (BFS)
@@ -211,7 +279,9 @@ void dibujar_celda(s16 cx, s16 cy) {
     if (cx < 0 || cy < 0 || cx >= MAP_WIDTH || cy >= MAP_HEIGHT) return;
     u8 t = mapa[cy][cx];
     // plano A: muros (autotile por vecinos), nido u objetos
-    if (t == TILE_MURO) {
+    if (t == TILE_MURO && (deco[cy][cx] & DECO_ESPECIAL)) {
+        poner_meta(BG_A, PAL0, base_maze + TILE_CLARO + (deco[cy][cx] & 7) * 4, cx, cy);   // árbol, tronco, follaje
+    } else if (t == TILE_MURO) {
         u16 mask = (hay_muro(cx, cy - 1) ? 1 : 0) | (hay_muro(cx + 1, cy) ? 2 : 0) |
                    (hay_muro(cx, cy + 1) ? 4 : 0) | (hay_muro(cx - 1, cy) ? 8 : 0);
         poner_meta(BG_A, PAL0, base_maze + mask * 4, cx, cy);
@@ -222,11 +292,17 @@ void dibujar_celda(s16 cx, s16 cy) {
     } else {
         s16 item = item_de_tile(t);
         if (item >= 0) poner_meta(BG_A, PAL2, base_items + item * 4, cx, cy);
-        else if (t == TILE_SUELO && deco[cy][cx]) poner_meta(BG_A, PAL1, base_floor + (META_DECO + deco[cy][cx] - 1) * 4, cx, cy);
+        else if (t == TILE_SUELO && deco[cy][cx] && deco[cy][cx] < DECO_CAMINO)
+            poner_meta(BG_A, PAL1, base_floor + (META_DECO + deco[cy][cx] - 1) * 4, cx, cy);
         else borrar_plano_a(cx, cy);
     }
+    if (deco[cy][cx] == DECO_CAMINO) {                    // camino de tierra: autotile con sus vecinos
+        u16 m = (camino(cx, cy - 1) ? 1 : 0) | (camino(cx + 1, cy) ? 2 : 0) | (camino(cx, cy + 1) ? 4 : 0) | (camino(cx - 1, cy) ? 8 : 0);
+        poner_meta(BG_B, PAL1, base_floor + (META_CAMINO + m) * 4, cx, cy);
+        return;
+    }
     // plano B: suelo con sombra proyectada por los muros de arriba/izquierda
-    u16 sombra = (hay_muro(cx, cy - 1) ? 1 : 0) | (hay_muro(cx - 1, cy) ? 2 : 0) | (hay_muro(cx - 1, cy - 1) ? 4 : 0);
+    u16 sombra = (da_sombra(cx, cy - 1) ? 1 : 0) | (da_sombra(cx - 1, cy) ? 2 : 0) | (da_sombra(cx - 1, cy - 1) ? 4 : 0);
     u16 textura = ((cx * 7) + (cy * 13)) & 3;
     poner_meta(BG_B, PAL1, base_floor + (textura * 8 + sombra) * 4, cx, cy);
 }
@@ -247,7 +323,7 @@ void cargar_graficos_mundo() {
     if (mundo_actual == MUNDO_VOLCAN)       { ts_maze = &ts_volcan_maze;  ts_floor = &ts_volcan_floor;  p_maze = &pal_volcan_maze;  p_floor = &pal_volcan_floor; }
     else if (mundo_actual == MUNDO_MARINO)  { ts_maze = &ts_marino_maze;  ts_floor = &ts_marino_floor;  p_maze = &pal_marino_maze;  p_floor = &pal_marino_floor; }
     else if (mundo_actual == MUNDO_CELESTE) { ts_maze = &ts_celeste_maze; ts_floor = &ts_celeste_floor; p_maze = &pal_celeste_maze; p_floor = &pal_celeste_floor; }
-    pal_maze_actual = p_maze; pal_floor_actual = p_floor;
+    pal_maze_actual = p_maze; pal_floor_actual = p_floor; ts_floor_actual = ts_floor;
     base_maze  = TILE_USER_INDEX;
     base_floor = base_maze + ts_maze->numTile;
     base_items = base_floor + ts_floor->numTile;

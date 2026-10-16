@@ -21,6 +21,7 @@ u16 anillo_recorte = 1;
 s16 password_mundo = -1;
 bool p1_es_pajaro = TRUE, ganador_fue_pajaro = TRUE;
 u16 versus_ronda = 1;
+u16 versus_papeles = 0;
 s16 timer_enredado = 0, timer_flicky_lento = 0, timer_cazador_rapido = 0;
 u16 versus_sel = 0, versus_tiempo_idx = 2, versus_victorias_req = 3, versus_mundo_idx = 4;
 bool historia_desde_menu = FALSE;
@@ -71,6 +72,7 @@ void inicializar_juego() {
     calcular_alcanzables();
     if (!en_jefe) repartir_polluelos_seguros();
     objetos_reset();
+    ambiente_reset();
     dibujar_mapa_completo();
     hud_forzar_redibujo();
 
@@ -97,6 +99,7 @@ void finalizar_partida() {
     if (cazador.sprite) { SPR_releaseSprite(cazador.sprite); cazador.sprite = NULL; }
     cazador_liberar();
     jefe_reset();
+    ambiente_reset();
     polluelos_reset();
     proyectiles_reset();
     fx_reset();
@@ -194,8 +197,18 @@ void fase_superada(bool fue_jefe) {
         char buf[32];
         sprintf(buf, T("PASSWORD DEL JEFE: %s", "BOSS PASSWORD: %s"), password_de(mundo_actual, d_sel));
         dibujar_mapa_completo();
-        banner(buf);
-        secuencia_heroe(ANIM_FELIZ, 150, FALSE);
+        // se queda en pantalla hasta pulsar START, para que dé tiempo a apuntarlo
+        u16 prev = JOY_readJoypad(JOY_1);
+        for (u16 f = 0; ; f++) {
+            if ((f & 31) == 0) banner_doble(buf, T("PULSA START", "PRESS START"));
+            else if ((f & 31) == 20) banner_doble(buf, "");
+            u16 j = JOY_readJoypad(JOY_1);
+            if ((j & ~prev) & BUTTON_START) break;
+            prev = j;
+            SPR_setFrame(flicky.sprite, (f >> 3) & 3);
+            fx_actualizar(); fx_scroll_actualizar(); SPR_update(); SYS_doVBlankProcess();
+        }
+        sonido(SFX_CLICK);
     }
     if (modo_juego_seleccionada == 1) {                 // modo libre: una sola fase
         banner(T("HAS ESCAPADO CON EXITO!", "YOU ESCAPED!"));
@@ -247,7 +260,7 @@ void verificar_fin_ronda_versus(bool gano_pajaro) {
         return;
     }
     versus_ronda++;
-    p1_es_pajaro = !p1_es_pajaro;                     // se cambian los papeles
+    if (versus_papeles == 2) p1_es_pajaro = !p1_es_pajaro;   // si se eligió alternar, se cambian los papeles
     resetear_tiempo_nivel();
     if (versus_mundo_idx == 4) mundo_actual = random() % 4;
     inicializar_juego();
@@ -336,6 +349,7 @@ void actualizar_logica() {
     animar_polluelos_mapa();
     objetos_actualizar();
     polluelos_voladores_actualizar();
+    ambiente_actualizar();
 
     if (timer_cazador_lento > 0) timer_cazador_lento--;
     if (timer_flicky_rapido > 0) timer_flicky_rapido--;

@@ -219,11 +219,15 @@ void mostrar_menu_versus() {
     musica_segun_estado(ESTADO_MENU_VERSUS);
 
     menu_opcion(modo_battle_royale ? T("BATTLE ROYALE      SI", "BATTLE ROYALE      ON") : T("BATTLE ROYALE      NO", "BATTLE ROYALE      OFF"), 5, 6, versus_sel == 0);
+    static const char* papeles_es[3] = { "J1 PAJARO", "J2 PAJARO", "ALTERNAR" };
+    static const char* papeles_en[3] = { "P1 BIRD", "P2 BIRD", "ALTERNATE" };
+    sprintf(buf, T("PAPELES            %s", "ROLES              %s"), idioma ? papeles_en[versus_papeles] : papeles_es[versus_papeles]);
+    menu_opcion(buf, 5, 8, versus_sel == 1);
     static const u16 segs[4] = { 60, 90, 120, 180 };
     sprintf(buf, T("TIEMPO DE RONDA    %d SEG", "ROUND TIME         %d SEC"), segs[versus_tiempo_idx]);
-    menu_opcion(buf, 5, 8, versus_sel == 1);
-    sprintf(buf, T("AL MEJOR DE        %d", "BEST OF            %d"), versus_victorias_req);
     menu_opcion(buf, 5, 10, versus_sel == 2);
+    sprintf(buf, T("AL MEJOR DE        %d", "BEST OF            %d"), versus_victorias_req);
+    menu_opcion(buf, 5, 12, versus_sel == 3);
     const char* nombre;
     switch (versus_mundo_idx) {
         case 0: nombre = T("BOSQUE", "FOREST"); break;
@@ -233,12 +237,13 @@ void mostrar_menu_versus() {
         default: nombre = T("AL AZAR", "RANDOM"); break;
     }
     sprintf(buf, T("ESCENARIO          %s", "STAGE              %s"), nombre);
-    menu_opcion(buf, 5, 12, versus_sel == 3);
-    menu_opcion(T("VOLVER AL MENU", "BACK TO MENU"), 5, 14, versus_sel == 4);
-    menu_texto(T("RONDA 1:  J1 PAJARO  J2 CAZADOR", "ROUND 1:  P1 BIRD  P2 HUNTER"), 5, 17, PAL1);
-    menu_texto(T("LOS PAPELES CAMBIAN CADA RONDA", "ROLES SWAP EVERY ROUND"), 5, 19, PAL3);
+    menu_opcion(buf, 5, 14, versus_sel == 4);
+    menu_opcion(T("VOLVER AL MENU", "BACK TO MENU"), 5, 16, versus_sel == 5);
+    if (versus_papeles == 2) menu_texto(T("LOS PAPELES CAMBIAN CADA RONDA", "ROLES SWAP EVERY ROUND"), 5, 19, PAL1);
+    else if (versus_papeles == 0) menu_texto(T("MANDO 1: PAJARO   2: CAZADOR", "PAD 1: BIRD   PAD 2: HUNTER"), 5, 19, PAL1);
+    else menu_texto(T("MANDO 1: CAZADOR   2: PAJARO", "PAD 1: HUNTER   PAD 2: BIRD"), 5, 19, PAL1);
     menu_texto(T("PAJARO A/B: HUEVO  (ATURDE)", "BIRD A/B: EGG  (STUNS)"), 5, 21, PAL3);
-    menu_texto(T("CAZADOR A/B: RED  (ENREDA)", "HUNTER A/B: NET  (TANGLES)"), 5, 23, PAL3);
+    menu_texto(T("CAZADOR A/B: RED  (ENREDA)", "HUNTER A/B: NET  (TANGLES)"), 5, 22, PAL3);
     menu_texto(T("PULSA START PARA EMPEZAR", "PRESS START TO BEGIN"), T(8, 10), 25, PAL1);
 }
 

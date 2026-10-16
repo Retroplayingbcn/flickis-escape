@@ -3,7 +3,7 @@
 
 static u32 cache_puntos = 0xFFFFFFFF;
 static u16 cache_tiempo = 0xFFFF, cache_huevos = 0xFFFF, cache_vidas = 0xFFFF, cache_municion = 0xFFFF, cache_jefe = 0xFFFF;
-static u8  cache_parpadeo = 0xFF;
+static u8  cache_parpadeo = 0xFF, cache_red = 0xFF;
 
 static void hud_texto(const char* txt, u16 col) {
     for (u16 i = 0; txt[i] && col + i < 40; i++) {
@@ -31,7 +31,7 @@ static void hud_limpiar() {
 
 void hud_forzar_redibujo() {
     cache_puntos = 0xFFFFFFFF; cache_tiempo = 0xFFFF; cache_huevos = 0xFFFF;
-    cache_vidas = 0xFFFF; cache_parpadeo = 0xFF; cache_municion = 0xFFFF; cache_jefe = 0xFFFF;
+    cache_vidas = 0xFFFF; cache_parpadeo = 0xFF; cache_red = 0xFF; cache_municion = 0xFFFF; cache_jefe = 0xFFFF;
     hud_limpiar();
 }
 
@@ -56,6 +56,9 @@ void hud_actualizar() {
     }
     if (modo_jugadores == 1) {
         if (total) { hud_texto(T("J1", "P1"), 0); hud_texto(T("J2", "P2"), 5); hud_icono(ITEM_POLLUELO, 23); }
+        // red del cazador: en color si está lista, en gris mientras recarga
+        u8 lista = (cazador.recarga == 0) ? 1 : 0;
+        if (cache_red != lista) { cache_red = lista; hud_icono(lista ? ITEM_RED : ITEM_RED_GRIS, 32); }
         if (cache_puntos != (u32)(victorias_j1 * 100 + victorias_j2)) {
             cache_puntos = victorias_j1 * 100 + victorias_j2;
             sprintf(buf, "%d", (u16)victorias_j1);  hud_texto(buf, 3);

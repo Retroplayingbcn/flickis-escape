@@ -18,7 +18,7 @@
 enum { TILE_SUELO, TILE_MURO, TILE_POLLUELO, TILE_NIDO, TILE_RELOJ, TILE_RAYO, TILE_GEMA, TILE_HUEVO };
 
 // iconos del tileset de objetos (4 tiles cada uno)
-enum { ITEM_POLLUELO, ITEM_RELOJ, ITEM_RAYO, ITEM_GEMA, ITEM_CARA, ITEM_HUEVO };
+enum { ITEM_POLLUELO, ITEM_RELOJ, ITEM_RAYO, ITEM_GEMA, ITEM_CARA, ITEM_HUEVO, ITEM_RED, ITEM_RED_GRIS };
 
 #define NIDO_X      9
 #define NIDO_Y      6
@@ -84,7 +84,10 @@ extern u8 estado_actual;
 extern u8 mapa[MAP_HEIGHT][MAP_WIDTH];
 extern bool alcanzable[MAP_HEIGHT][MAP_WIDTH];
 extern u8 distancia[MAP_HEIGHT][MAP_WIDTH];
-extern u8 deco[MAP_HEIGHT][MAP_WIDTH];        // adornos del suelo (0 = nada, 1..5)
+extern u8 deco[MAP_HEIGHT][MAP_WIDTH];        // adornos del suelo (0 = nada, 1..6) y piezas especiales:
+#define DECO_ESPECIAL 0x80                      //   muro dibujado como árbol/tronco/follaje (pieza en los bits bajos)
+#define DECO_CAMINO   0x40                      //   suelo de tierra (camino del claro)
+enum { PIEZA_ARBOL_TL, PIEZA_ARBOL_TR, PIEZA_ARBOL_BL, PIEZA_ARBOL_BR, PIEZA_TRONCO_I, PIEZA_TRONCO_D, PIEZA_FOLLAJE1, PIEZA_FOLLAJE2 };
 
 extern u16 d_sel, max_polluelos_nivel, semillas_en_fila, total_salvados, municion;
 extern Sprite* sprites_seguidores[MAX_POLLUELOS];
@@ -107,6 +110,7 @@ extern bool historia_desde_menu;
 // versus: los papeles se alternan cada ronda; el battle royale solo existe en este modo
 extern bool p1_es_pajaro, ganador_fue_pajaro;
 extern u16 versus_ronda;
+extern u16 versus_papeles;                      // 0: J1 pájaro, 1: J2 pájaro, 2: se alternan
 extern s16 timer_enredado, timer_flicky_lento, timer_cazador_rapido;
 #define VICTORIAS_PARA_GANAR ((u32)((versus_victorias_req + 1) / 2))   // al mejor de 3 = gana quien llega a 2
 // jefes: Flicki crece con la fuerza de sus polluelos; cada polluelo es un corazón
@@ -144,7 +148,9 @@ extern u16 base_maze, base_floor, base_items, base_hud;
 void cargar_graficos_mundo();
 void generar_mapa_aleatorio();
 void generar_arena();
-void decorar(u16 n);
+void decorar(u16 n, bool volumen);
+bool muros_en_alerta();
+void deco_viento(bool doblado);
 void calcular_alcanzables();
 void calcular_distancias(s16 cx, s16 cy);
 void repartir_polluelos_seguros();
@@ -183,6 +189,11 @@ void fx_scroll_actualizar();
 void fx_fundido_salida();
 void fx_fundido_entrada();
 void banner(const char* txt);
+void banner_doble(const char* a, const char* b);
+
+// ---------------------------------------------------------------- ambiente.c
+void ambiente_reset();
+void ambiente_actualizar();
 enum { POP_100, POP_200, POP_300, POP_400, POP_500, POP_600, POP_700, POP_800, POP_900, POP_1000, POP_250, POP_1UP, POP_AVISO };
 
 // ---------------------------------------------------------------- jugador.c

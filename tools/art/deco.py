@@ -7,7 +7,7 @@ import math
 
 DECO_PAL = {
     #           6              7              8              9              10             11             12             13             14             15
-    'bosque':  [(240,120,160),(250,220,80),(250,250,240),(52,110,40),(104,176,60),(140,92,48),(92,58,32),(220,60,50),(244,224,186),(36,40,28)],
+    'bosque':  [(240,120,160),(250,220,80),(250,250,240),(52,110,40),(104,176,60),(140,92,48),(92,58,32),(220,60,50),(206,168,112),(36,40,28)],
     'volcan':  [(255,140,40),(255,222,100),(120,104,104),(76,62,66),(160,146,140),(190,180,180),(236,226,206),(150,40,30),(255,96,32),(30,20,24)],
     'marino':  [(255,120,150),(196,64,108),(250,234,206),(214,174,140),(64,164,110),(30,110,80),(250,150,60),(210,244,255),(255,200,120),(70,52,66)],
     'celeste': [(255,255,255),(204,214,244),(255,232,110),(240,100,100),(250,170,80),(120,210,120),(110,150,240),(176,124,224),(255,250,210),(92,108,170)],
@@ -242,10 +242,100 @@ def estrellitas():
         px(g, x, y, 8); px(g, x - 1, y, 14); px(g, x + 1, y, 14); px(g, x, y - 1, 14); px(g, x, y + 1, 14)
     return g
 
+# ------------------------------------------------------------------ adornos planos nuevos
+def hojas():
+    g = blank()
+    for (x, y, c, d) in ((4, 5, 10, 1), (11, 4, 11, 0), (8, 10, 9, 1), (12, 12, 10, 0), (3, 12, 11, 1)):
+        for k in range(-2, 3):
+            px(g, x + k, y + (k * (1 if d else -1)) // 2, c)
+        px(g, x, y + (1 if d else -1), c)
+        px(g, x - 2, y - (1 if d else -1), 12 if c == 11 else 9)
+    return g
+
+def trebol():
+    g = blank()
+    for (x, y) in ((5, 6), (11, 10), (4, 12)):
+        for (dx, dy) in ((0, -1), (-1, 0), (1, 0)):
+            ellipse(g, x + dx * 1.3 + .5, y + dy * 1.3 + .5, 1.2, 1.2, 10)
+        px(g, x, y + 1, 9); px(g, x, y + 2, 9)
+    for (x, y) in ((9, 4), (13, 6)): px(g, x, y, 8)
+    return g
+
+def grieta2():
+    g = blank()
+    pts = [(3, 3), (6, 6), (5, 9), (8, 11), (12, 12)]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        n = max(abs(x1 - x0), abs(y1 - y0))
+        for k in range(n + 1):
+            x = round(x0 + (x1 - x0) * k / n); y = round(y0 + (y1 - y0) * k / n)
+            px(g, x - 1, y, 13); px(g, x + 1, y, 13); px(g, x, y, 6)
+    px(g, 6, 7, 7); px(g, 9, 11, 7); px(g, 9, 6, 13); px(g, 10, 6, 6)
+    return g
+
+def brasas():
+    g = blank()
+    for (x, y) in ((4, 5), (10, 4), (7, 9), (12, 11), (3, 12)):
+        px(g, x, y, 6); px(g, x + 1, y, 13); px(g, x, y + 1, 13)
+    px(g, 7, 9, 7); px(g, 10, 4, 7)
+    return g
+
+def conchitas():
+    g = blank()
+    for (x, y) in ((5, 6), (11, 11)):
+        for yy in range(16):
+            for xx in range(16):
+                dx, dy = xx + .5 - x, yy + .5 - y
+                r = math.hypot(dx, dy); a = math.atan2(dy, dx)
+                if r < 3.2 and -math.pi < a < 0: g[yy][xx] = 9 if int((a + math.pi) / (math.pi / 4)) % 2 else 8
+    px(g, 12, 5, 12); px(g, 4, 12, 14)
+    return outline(g, 15)
+
+def estrella_sola():
+    g = blank()
+    for k in range(-3, 4):
+        px(g, 8 + k, 8, 8); px(g, 8, 8 + k, 8)
+    px(g, 7, 7, 14); px(g, 9, 9, 14); px(g, 9, 7, 14); px(g, 7, 9, 14); px(g, 8, 8, 14)
+    return g
+
+# versiones dobladas por el viento (bosque): sustituyen a hierba y flores durante una ráfaga
+def hierba_doblada():
+    g = blank()
+    shadow(g, 8, 14, 6)
+    for i, (x, h) in enumerate(((3, 5), (5, 8), (7, 6), (8, 10), (10, 7), (12, 9), (13, 5))):
+        for k in range(h):
+            px(g, x + (k * 3) // h + (1 if k > h * 0.7 else 0), 14 - k, 10 if k > h // 2 else 9)
+    return outline(g, 15)
+
+def flores_dobladas():
+    g = blank()
+    for (cx, cy, pet) in ((5, 6, 6), (12, 4, 7), (10, 11, 8)):
+        for y in range(cy + 2, min(16, cy + 5)): px(g, cx - (cy + 4 - y) // 2, y, 9)
+        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)): px(g, cx + dx, cy + dy, pet)
+        px(g, cx + 1, cy - 1, pet)
+        px(g, cx, cy, 7 if pet != 7 else 11)
+    return outline(g, 15)
+
+# camino de tierra del claro (bosque): autotile por vecinos (bit0 arriba, bit1 derecha, bit2 abajo, bit3 izquierda)
+def camino(mask, x, y):
+    up, ri, dn, le = mask & 1, mask & 2, mask & 4, mask & 8
+    def borde(t, k): return 2 + (((t * 7 + k * 3) % 5) == 0) - (((t * 5 + k) % 4) == 0)
+    if not up and y < borde(x, 1): return 0
+    if not dn and y > 15 - borde(x, 2): return 0
+    if not le and x < borde(y, 3): return 0
+    if not ri and x > 15 - borde(y, 4): return 0
+    h = ((x * 73856093) ^ (y * 19349663) ^ (mask * 83492791)) & 0xFFFF
+    v = (h * 2654435761 >> 7) % 100
+    if v < 7: return 11
+    if v < 9: return 12
+    if v > 96: return 12
+    return 14
+
 DECOS = {
-    'bosque':  [flores, seta, hierba, tocon, piedras],
-    'volcan':  [grieta, roca_humo, huesos, cristales, piedras_v],
-    'marino':  [coral, concha, algas, estrella_mar, burbujas],
-    'celeste': [nubecita, estrella, arcoiris, nubes_mini, estrellitas],
+    # los dos últimos tienen volumen: solo se ponen en la arena del jefe (en un pasillo parecerían un muro)
+    'bosque':  [flores, hojas, hierba, trebol, seta, tocon],
+    'volcan':  [grieta, grieta2, brasas, huesos, roca_humo, cristales],
+    'marino':  [coral, concha, algas, estrella_mar, burbujas, conchitas],
+    'celeste': [nubecita, estrella, arcoiris, nubes_mini, estrellitas, estrella_sola],
 }
-NUM_DECO = 5
+DOBLADOS = {'bosque': [flores_dobladas, hierba_doblada]}
+NUM_DECO = 6
