@@ -1176,7 +1176,10 @@ void generar_mapa_aleatorio() {
     static bool visitada[MAP_HEIGHT][10];
     const s16 ddx[4] = {2, -2, 0, 0};
     const s16 ddy[4] = {0, 0, 2, -2};
-    setRandomSeed(random() ^ (u16)vtimer);   // cada nivel distinto (depende del tiempo en menús)
+    {   // cada nivel distinto (depende del tiempo en menús); nunca semilla nula para el xorshift
+        u16 semilla = random() ^ (u16)vtimer ^ 0xD94B;
+        setRandomSeed(semilla ? (semilla ^ 0xD94B) : 0x1234);
+    }
 
     for (u16 y = 0; y < MAP_HEIGHT; y++) {
         for (u16 x = 0; x < MAP_WIDTH; x++) mapa[y][x] = TILE_MURO;
@@ -1779,7 +1782,9 @@ void mover_cazador() {
                 bool larr = (ty > 0) && (mapa[ty - 1][tx] != TILE_MURO) && (cazador.y_vel != 1);
                 bool laba = (ty < MAP_HEIGHT - 1) && (mapa[ty + 1][tx] != TILE_MURO) && (cazador.y_vel != -1);
                 s16 ptx = tx + cazador.x_vel, pty = ty + cazador.y_vel;
-                bool blq = (ptx < 0 || ptx >= MAP_WIDTH || pty < 0 || pty >= MAP_HEIGHT || mapa[pty][ptx] == TILE_MURO);
+                // parado (al empezar o tras chocar) cuenta como bloqueado: siempre elige una dirección nueva
+                bool blq = (cazador.x_vel == 0 && cazador.y_vel == 0) ||
+                           (ptx < 0 || ptx >= MAP_WIDTH || pty < 0 || pty >= MAP_HEIGHT || mapa[pty][ptx] == TILE_MURO);
 
                 if (semillas_en_fila > 0 && ((random() & 63) < 45)) { 
                     s16 ox = 0, oy = 0;
