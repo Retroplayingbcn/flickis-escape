@@ -18,6 +18,7 @@ u32 total_partidas = 0, victorias_j1 = 0, victorias_j2 = 0;
 u16 multiplicador_velocidad_minuto = 0;
 bool modo_battle_royale = FALSE, en_preaviso_cierre = FALSE;
 u16 anillo_recorte = 1;
+s16 password_mundo = -1;
 bool p1_es_pajaro = TRUE, ganador_fue_pajaro = TRUE;
 u16 versus_ronda = 1;
 s16 timer_enredado = 0, timer_flicky_lento = 0, timer_cazador_rapido = 0;
@@ -59,7 +60,12 @@ void inicializar_juego() {
     flicky_invulnerable = FALSE; timer_invulnerabilidad = 0;
     if (modo_jugadores == 1) municion = 1;              // en versus, cada ronda empieza igual
     else if (municion < 1) municion = 1;                // cada ronda empieza al menos con un huevo
-    if (en_jefe) { tiempo_restante_segundos = 120 + (2 - d_sel) * 30; tiempo_inicial = tiempo_restante_segundos; }
+    if (en_jefe) {
+        tiempo_restante_segundos = 120 + (2 - d_sel) * 30; tiempo_inicial = tiempo_restante_segundos;
+        if (municion < 2) municion = 2;
+        password_mundo = mundo_actual;                  // desde aquí, el password de este jefe
+    }
+    corazones = 0;
 
     if (en_jefe) generar_arena(); else generar_mapa_aleatorio();
     calcular_alcanzables();
@@ -111,8 +117,18 @@ void preparados() {
         sprintf(buf, T("RONDA %d", "ROUND %d"), versus_ronda);
         banner(buf);
         total = 190;
-    } else banner(en_jefe ? jefe_nombre() : T("PREPARADOS...", "GET READY..."));
+    } else if (en_jefe) {
+        // los polluelos dan su fuerza a Flicki, y el jefe cae del cielo
+        banner(T("TUS POLLUELOS TE DAN FUERZA!", "YOUR CHICKS GIVE YOU POWER!"));
+        polluelos_poder();
+        dibujar_mapa_completo();
+        banner(jefe_nombre());
+        for (u16 f = 0; f < 16; f++) { fx_scroll_actualizar(); SPR_update(); SYS_doVBlankProcess(); }
+        while (!jefe_caer()) { fx_actualizar(); fx_scroll_actualizar(); SPR_update(); SYS_doVBlankProcess(); }
+        total = 64;
+    } else banner(T("PREPARADOS...", "GET READY..."));
     for (u16 f = 0; f < total; f++) {
+        fx_actualizar();
         if (modo_jugadores == 1 && f == 70) {
             dibujar_mapa_completo();
             sprintf(buf, T("PAJARO: J%d   CAZADOR: J%d", "BIRD: P%d   HUNTER: P%d"), p1_es_pajaro ? 1 : 2, p1_es_pajaro ? 2 : 1);
@@ -144,7 +160,7 @@ void jugador_muere(const char* motivo) {
     SPR_setAnim(flicky.sprite, ANIM_HERIDO); flicky.anim = ANIM_HERIDO; SPR_setHFlip(flicky.sprite, FALSE);
     for (u16 f = 0; f < 110; f++) {
         SPR_setFrame(flicky.sprite, (f >> 3) & 3);
-        SPR_setPosition(flicky.sprite, flicky.x + shake_x, flicky.y + PLAY_Y);
+        SPR_setPosition(flicky.sprite, FLICKY_SPR_X + shake_x, FLICKY_SPR_Y + PLAY_Y);
         fx_actualizar();
         fx_scroll_actualizar();
         SPR_update();
@@ -172,6 +188,14 @@ void fase_superada(bool fue_jefe) {
         banner(buf);
         sumar_puntos(bonus);
         secuencia_heroe(ANIM_FELIZ, 80, FALSE);
+    }
+    if (modo_juego_seleccionada == 0 && fase_actual + 1 == FASE_JEFE) {
+        // antes del jefe, el password para poder volver aquí
+        char buf[32];
+        sprintf(buf, T("PASSWORD DEL JEFE: %s", "BOSS PASSWORD: %s"), password_de(mundo_actual, d_sel));
+        dibujar_mapa_completo();
+        banner(buf);
+        secuencia_heroe(ANIM_FELIZ, 150, FALSE);
     }
     if (modo_juego_seleccionada == 1) {                 // modo libre: una sola fase
         banner(T("HAS ESCAPADO CON EXITO!", "YOU ESCAPED!"));
@@ -247,6 +271,7 @@ static void aplicar_recorte_battle_royale() {
             if (!fuera_del_anillo(x, y)) continue;
             u8 t = mapa[y][x];
             mapa[y][x] = TILE_MURO;
+            deco[y][x] = 0;
             if (t == TILE_POLLUELO) polluelo_volar(x * CELDA, y * CELDA);
         }
     }
@@ -386,9 +411,9 @@ void actualizar_logica() {
     if (en_jefe) {
         jefe_actualizar();
         if (estado_actual != ESTADO_JUEGO) return;
-        if (!flicky_invulnerable && jefe_toca(flicky.x + 8, flicky.y + 8, 4)) {
-            jugador_muere(T("EL JEFE TE ATRAPO!", "THE BOSS CAUGHT YOU!"));
-            return;
+        if (!flicky_invulnerable && jefe_toca(flicky.x + 8, flicky.y + 8, 3)) {
+            jugador_herido_jefe();
+            if (estado_actual != ESTADO_JUEGO) return;
         }
         hud_actualizar();
         return;

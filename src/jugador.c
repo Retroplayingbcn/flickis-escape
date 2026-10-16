@@ -22,7 +22,11 @@ void ganar_vida() {
     fx_popup(flicky.x, flicky.y - 10, POP_1UP);
 }
 
+s16 corazones = 0;
+bool flicky_grande = FALSE;
+
 void jugador_crear(s16 cx, s16 cy) {
+    flicky_grande = FALSE;
     flicky.x = cx * CELDA; flicky.y = cy * CELDA;
     flicky.x_vel = 0; flicky.y_vel = 0; flicky.dir_x = 1; flicky.dir_y = 0;
     flicky.anim = 0xFF;
@@ -64,12 +68,19 @@ static void recoger(s16 cx, s16 cy) {
     u8 t = mapa[cy][cx];
     if (t == TILE_SUELO || t == TILE_MURO) return;
     if (t == TILE_POLLUELO && semillas_en_fila >= MAX_POLLUELOS) return;
-    if (t == TILE_POLLUELO && en_jefe) return;
+    if (t == TILE_POLLUELO && en_jefe && corazones >= MAX_CORAZONES) return;
     mapa[cy][cx] = TILE_SUELO;
     dibujar_celda(cx, cy);
     fx_chispa(cx * CELDA, cy * CELDA);
     switch (t) {
         case TILE_POLLUELO: {
+            if (en_jefe) {                               // en el jefe, un polluelo es un corazón más
+                corazones++;
+                sonido(SFX_VIDA);
+                fx_estallido(flicky.x, flicky.y);
+                hud_actualizar();
+                break;
+            }
             Sprite* s = SPR_addSprite(&chick_sprite, flicky.x, flicky.y + PLAY_Y, TILE_ATTR(PAL2, 0, FALSE, FALSE));
             if (s) SPR_setAnimationLoop(s, TRUE);
             sprites_seguidores[semillas_en_fila++] = s;
@@ -146,7 +157,7 @@ void jugador_animar() {
         if (flicky.x_vel || flicky.y_vel) SPR_nextFrame(flicky.sprite);
         else SPR_setFrame(flicky.sprite, 0);
     }
-    SPR_setPosition(flicky.sprite, flicky.x + shake_x, flicky.y + PLAY_Y);
+    SPR_setPosition(flicky.sprite, FLICKY_SPR_X + shake_x, FLICKY_SPR_Y + PLAY_Y);
     // parpadeo de invulnerabilidad
     if (flicky_invulnerable) {
         if (--timer_invulnerabilidad <= 0) { flicky_invulnerable = FALSE; SPR_setVisibility(flicky.sprite, VISIBLE); }
@@ -154,7 +165,7 @@ void jugador_animar() {
     }
     // estrellitas de mareo
     if (estrellas) {
-        SPR_setPosition(estrellas, flicky.x - 4 + shake_x, flicky.y + PLAY_Y - 7);
+        SPR_setPosition(estrellas, FLICKY_SPR_X + (flicky_grande ? 0 : -4) + shake_x, FLICKY_SPR_Y + PLAY_Y - 7);
         if ((frame_counter & 3) == 0) SPR_nextFrame(estrellas);
         if (--estrellas_t <= 0) { SPR_releaseSprite(estrellas); estrellas = NULL; }
     }
@@ -295,7 +306,7 @@ void secuencia_heroe(u8 anim, u16 frames, bool salta) {
     for (u16 f = 0; f < frames; f++) {
         SPR_setFrame(flicky.sprite, (f >> 3) & 3);
         s16 dy = salta ? salto[(f >> 1) & 7] : 0;
-        SPR_setPosition(flicky.sprite, flicky.x, flicky.y + PLAY_Y + dy);
+        SPR_setPosition(flicky.sprite, FLICKY_SPR_X, FLICKY_SPR_Y + PLAY_Y + dy);
         if ((f & 15) == 0) fx_chispa(flicky.x + ((f & 16) ? -10 : 10), flicky.y - 6);
         fx_actualizar();
         fx_scroll_actualizar();
@@ -303,4 +314,86 @@ void secuencia_heroe(u8 anim, u16 frames, bool salta) {
         SPR_update();
         SYS_doVBlankProcess();
     }
+}
+
+// ------------------------------------------------------------------ jefes: Flicki grande
+void jugador_crecer(bool grande) {
+    if (!flicky.sprite || flicky_grande == grande) return;
+    flicky_grande = grande;
+    SPR_setDefinition(flicky.sprite, grande ? &hero_grande_sprite : &hero_sprite);
+    flicky.anim = 0xFF;
+    SPR_setAnim(flicky.sprite, ANIM_ABAJO); flicky.anim = ANIM_ABAJO;
+    SPR_setPosition(flicky.sprite, FLICKY_SPR_X + shake_x, FLICKY_SPR_Y + PLAY_Y);
+}
+
+// Presentación del jefe: los polluelos que has salvado llegan corriendo y le dan su fuerza a Flicki
+void polluelos_poder() {
+    static const s16 origen[MAX_CORAZONES][2] = { { 1 * CELDA, 1 * CELDA }, { 1 * CELDA, 11 * CELDA }, { 6 * CELDA, 11 * CELDA } };
+    Sprite* p[MAX_CORAZONES];
+    corazones = 0;
+    for (u16 i = 0; i < MAX_CORAZONES; i++) {
+        p[i] = SPR_addSprite(&chick_sprite, origen[i][0], origen[i][1] + PLAY_Y, TILE_ATTR(PAL2, 1, FALSE, FALSE));
+        if (p[i]) { SPR_setAnimationLoop(p[i], TRUE); SPR_setVisibility(p[i], HIDDEN); }
+    }
+    hud_actualizar();
+    // cada polluelo aparece con un destello y va dando saltitos hasta Flicki
+    #define LLEGADA 40
+    for (u16 f = 0; f < 14 * MAX_CORAZONES + LLEGADA + 4; f++) {
+        for (u16 i = 0; i < MAX_CORAZONES; i++) {
+            if (!p[i]) continue;
+            s16 t = (s16)f - (s16)(i * 14);
+            if (t < 0) continue;
+            if (t == 0) { SPR_setVisibility(p[i], VISIBLE); fx_chispa(origen[i][0], origen[i][1]); sonido(SFX_PIO); }
+            s16 x = origen[i][0] + ((flicky.x - origen[i][0]) * t) / LLEGADA;
+            s16 y = origen[i][1] + ((flicky.y - origen[i][1]) * t) / LLEGADA - (((t >> 2) & 1) ? 3 : 0);
+            SPR_setPosition(p[i], x + shake_x, y + PLAY_Y);
+            if (t >= LLEGADA) {
+                SPR_releaseSprite(p[i]); p[i] = NULL;
+                corazones++;
+                fx_estallido(flicky.x, flicky.y);
+                sonido(SFX_GEMA);
+                hud_actualizar();
+            }
+        }
+        if ((f & 7) == 0) SPR_nextFrame(flicky.sprite);
+        fx_actualizar(); fx_scroll_actualizar(); SPR_update(); SYS_doVBlankProcess();
+    }
+    // ¡poder! Flicki parpadea entre los dos tamaños y se queda grande
+    sonido(SFX_VIDA);
+    for (u16 f = 0; f < 32; f++) {
+        jugador_crecer(f >= 28 || ((f >> 2) & 1));
+        if ((f & 7) == 0) fx_chispa(flicky.x + ((f & 8) ? -12 : 12), flicky.y - 8);
+        fx_actualizar(); fx_scroll_actualizar(); SPR_update(); SYS_doVBlankProcess();
+    }
+    jugador_crecer(TRUE);
+    fx_destello();
+    efecto_shake(10, 2);
+    for (u16 i = 0; i < MAX_CORAZONES; i++) if (p[i]) SPR_releaseSprite(p[i]);
+}
+
+// En el jefe un golpe no mata: se escapa uno de los polluelos que te protegen
+void jugador_herido_jefe() {
+    if (flicky_invulnerable) return;
+    corazones--;
+    fx_estallido(flicky.x, flicky.y);
+    fx_destello();
+    efecto_shake(16, 3);
+    hud_actualizar();
+    if (corazones <= 0) {
+        corazones = 0;
+        jugador_crecer(FALSE);
+        jugador_muere(T("TE QUEDASTE SIN POLLUELOS!", "NO CHICKS LEFT TO PROTECT YOU!"));
+        return;
+    }
+    sonido(SFX_PANICO);
+    // el polluelo sale volando y se queda en la arena: puedes ir a recuperarlo
+    calcular_distancias((flicky.x + 8) >> CELDA_SHIFT, (flicky.y + 8) >> CELDA_SHIFT);
+    polluelo_volar(flicky.x, flicky.y);
+    flicky_invulnerable = TRUE;
+    timer_invulnerabilidad = 120;
+    if (!estrellas) {
+        estrellas = SPR_addSprite(&estrellas_sprite, flicky.x - 4, flicky.y + PLAY_Y - 7, TILE_ATTR(PAL2, 1, FALSE, FALSE));
+        if (estrellas) SPR_setDepth(estrellas, SPR_MIN_DEPTH);
+    }
+    estrellas_t = 60;
 }

@@ -4,6 +4,9 @@
 u8 mapa[MAP_HEIGHT][MAP_WIDTH];
 bool alcanzable[MAP_HEIGHT][MAP_WIDTH];
 u8 distancia[MAP_HEIGHT][MAP_WIDTH];
+u8 deco[MAP_HEIGHT][MAP_WIDTH];
+
+#define META_DECO 32          // en el tileset del suelo: 32 metatiles de suelo y luego 5 adornos
 u16 base_maze, base_floor, base_items, base_hud;
 
 static const Palette* pal_maze_actual = &pal_bosque_maze;
@@ -90,15 +93,34 @@ void generar_mapa_aleatorio() {
         for (s16 x = 0; x < 10; x++) mapa[y][MAP_WIDTH - 1 - x] = mapa[y][x];
     for (s16 x = 0; x < MAP_WIDTH; x++) { mapa[0][x] = TILE_MURO; mapa[MAP_HEIGHT - 1][x] = TILE_MURO; }
     for (s16 y = 0; y < MAP_HEIGHT; y++) { mapa[y][0] = TILE_MURO; mapa[y][MAP_WIDTH - 1] = TILE_MURO; }
+    decorar(8);
 }
 
-// Arena del jefe: espacio abierto con cuatro columnas para cubrirse
+// adornos del suelo al azar (no estorban: solo se dibujan)
+void decorar(u16 n) {
+    memset(deco, 0, sizeof(deco));
+    for (u16 i = 0, intentos = 0; i < n && intentos < 200; intentos++) {
+        s16 x = (random() % (MAP_WIDTH - 2)) + 1, y = (random() % (MAP_HEIGHT - 2)) + 1;
+        if (mapa[y][x] != TILE_SUELO || en_zona_nido(x, y) || deco[y][x] || (x <= 2 && y <= 2)) continue;
+        deco[y][x] = 1 + (random() % 5);
+        i++;
+    }
+}
+
+// Arena del jefe: espacio abierto con columnas para cubrirse
 void generar_arena() {
     for (s16 y = 0; y < MAP_HEIGHT; y++)
         for (s16 x = 0; x < MAP_WIDTH; x++)
             mapa[y][x] = (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1) ? TILE_MURO : TILE_SUELO;
-    static const s8 columnas[][2] = { {5, 3}, {14, 3}, {5, 9}, {14, 9}, {9, 6}, {10, 6} };
-    for (u16 i = 0; i < 6; i++) mapa[(u16)columnas[i][1]][(u16)columnas[i][0]] = TILE_MURO;
+    // tres disposiciones de columnas; siempre con pasillos de 2 casillas para que el jefe quepa
+    static const s8 disp[3][10][2] = {
+        { {5, 3}, {14, 3}, {5, 9}, {14, 9}, {9, 6}, {10, 6}, {-1, 0} },
+        { {4, 3}, {5, 3}, {14, 3}, {15, 3}, {4, 9}, {5, 9}, {14, 9}, {15, 9}, {9, 6}, {10, 6} },
+        { {9, 3}, {10, 3}, {9, 9}, {10, 9}, {5, 6}, {16, 3}, {16, 9}, {3, 3}, {3, 9}, {-1, 0} },
+    };
+    u16 d = random() % 3;
+    for (u16 i = 0; i < 10 && disp[d][i][0] >= 0; i++) mapa[(u16)disp[d][i][1]][(u16)disp[d][i][0]] = TILE_MURO;
+    decorar(10);
 }
 
 // ------------------------------------------------------------------ recorridos (BFS)
@@ -200,6 +222,7 @@ void dibujar_celda(s16 cx, s16 cy) {
     } else {
         s16 item = item_de_tile(t);
         if (item >= 0) poner_meta(BG_A, PAL2, base_items + item * 4, cx, cy);
+        else if (t == TILE_SUELO && deco[cy][cx]) poner_meta(BG_A, PAL1, base_floor + (META_DECO + deco[cy][cx] - 1) * 4, cx, cy);
         else borrar_plano_a(cx, cy);
     }
     // plano B: suelo con sombra proyectada por los muros de arriba/izquierda
@@ -265,8 +288,10 @@ void mapa_paleta_animar() {
         static const u16 lava[6] = { RGB24_TO_VDPCOLOR(0xFF8C28), RGB24_TO_VDPCOLOR(0xFFB040), RGB24_TO_VDPCOLOR(0xFFD860),
                                      RGB24_TO_VDPCOLOR(0xFFB040), RGB24_TO_VDPCOLOR(0xFF8C28), RGB24_TO_VDPCOLOR(0xE05020) };
         PAL_setColor(4, lava[(frame_counter >> 3) % 6]);
+        PAL_setColor(16 + 6, lava[((frame_counter >> 3) + 2) % 6]);       // la lava de los adornos, a contratiempo
     } else if (mundo_actual == MUNDO_CELESTE && (frame_counter & 15) == 0) {
         PAL_setColor(16 + 3, ((frame_counter >> 4) & 1) ? pal_floor_actual->data[1] : RGB24_TO_VDPCOLOR(0xE8F4FF));
+        PAL_setColor(16 + 8, ((frame_counter >> 4) & 1) ? pal_floor_actual->data[8] : RGB24_TO_VDPCOLOR(0xFFFFFF));   // estrellas que titilan
     }
 }
 

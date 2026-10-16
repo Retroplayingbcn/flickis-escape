@@ -64,6 +64,7 @@ extern const TileSet ts_items;
 extern const TileSet ts_hud;
 extern const TileSet ts_font;
 extern const SpriteDefinition hero_sprite;
+extern const SpriteDefinition hero_grande_sprite;
 extern const SpriteDefinition chick_sprite;
 extern const SpriteDefinition hunter_sprite;
 extern const TileSet ts_chick_anim;

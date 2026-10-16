@@ -5,7 +5,7 @@ Run from repo root:  python3 tools/art/gen_assets.py
 import os, sys, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PIL import Image
-import hero_views as HV, cast as CAST, font5x7 as F
+import hero_views as HV, cast as CAST, font5x7 as F, deco as DECO
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 OUT = os.path.join(ROOT, 'res', 'gen')
@@ -55,8 +55,9 @@ WORLDS = {
 # PAL0 layout: 0 transp,1-5 wall,6-8 nest,9-11 hud,12 egg,13 free,14 shadow,15 white
 def pal0(t):
     return [(0,0,0)] + t['wall'] + t['nest'] + t['hud'] + [(250,250,240),(200,200,190),(0,0,0),(255,255,255)]
-def pal1(t):
-    return [(0,0,0)] + t['floor'] + [t['shadow'], t['shadow2']]
+def pal1(t, name=None):
+    base = [(0,0,0)] + t['floor'] + [t['shadow'], t['shadow2']]
+    return base + (DECO.DECO_PAL[name] if name else [])
 
 # ------------------------------------------------------------------ WALL AUTOTILES (PAL0)
 def wall_pixel(mask, xx, yy, variant, world='bosque'):
@@ -179,7 +180,11 @@ def gen_world(name):
                     if (up and y < 2) or (le and x < 2): c = 5
                 return c
             ftiles += metatile_to_tiles(fpx)
-    save_indexed(os.path.join(OUT, f'{name}_floor.png'), strip(ftiles), 8, 8*len(ftiles), pal1(t))
+    # metatiles 32..36: adornos del suelo (se pintan en el plano A, sin colisión)
+    for fn in DECO.DECOS[name]:
+        g = fn()
+        ftiles += metatile_to_tiles(lambda x, y, g=g: g[y][x])
+    save_indexed(os.path.join(OUT, f'{name}_floor.png'), strip(ftiles), 8, 8*len(ftiles), pal1(t, name))
     print(name, 'maze tiles', len(tiles), 'floor tiles', len(ftiles))
 
 # ------------------------------------------------------------------ SPRITES & ITEMS (PAL2 = hero palette)
@@ -228,9 +233,53 @@ def sheet(frames_rows, fw, fh, pal_index_fn, pal, path):
                     pix[r*fh+y][c*fw+x] = pal_index_fn(ch)
     save_indexed(path, pix, W, H, pal)
 
+# Flicki grande (24x24) para los jefes: Scale3x y reducción a la mitad, sin perder rasgos finos
+def scale3x(g):
+    h=len(g); w=len(g[0]); o=[['.']*(w*3) for _ in range(h*3)]
+    P=lambda x,y: g[y][x] if 0<=x<w and 0<=y<h else '.'
+    for y in range(h):
+        for x in range(w):
+            A,B,C,D,E,F,G,H,I=P(x-1,y-1),P(x,y-1),P(x+1,y-1),P(x-1,y),P(x,y),P(x+1,y),P(x-1,y+1),P(x,y+1),P(x+1,y+1)
+            if B!=H and D!=F:
+                e=[D if D==B else E, E if (D==B and E!=C) or (B==F and E!=A) else E, F if B==F else E,
+                   D if (D==B and E!=G) or (D==H and E!=A) else E, E, F if (B==F and E!=I) or (H==F and E!=C) else E,
+                   D if D==H else E, E if (D==H and E!=I) or (H==F and E!=G) else E, F if H==F else E]
+                # scale3x proper: E1 = (D==B&&E!=C)||(B==F&&E!=A) ? B : E
+                e[1]=B if ((D==B and E!=C) or (B==F and E!=A)) else E
+                e[3]=D if ((D==B and E!=G) or (D==H and E!=A)) else E
+                e[5]=F if ((B==F and E!=I) or (H==F and E!=C)) else E
+                e[7]=H if ((D==H and E!=I) or (H==F and E!=G)) else E
+            else: e=[E]*9
+            for k in range(9): o[y*3+k//3][x*3+k%3]=e[k]
+    return o
+def down2(g):
+    h=len(g)//2; w=len(g[0])//2; o=[['.']*w for _ in range(h)]
+    for y in range(h):
+        for x in range(w):
+            c=[g[2*y][2*x],g[2*y][2*x+1],g[2*y+1][2*x],g[2*y+1][2*x+1]]
+            if 'K' in c and c.count('K')>=2: o[y][x]='K'; continue
+            nz=[k for k in c if k!='.']
+            best=max(set(nz),key=lambda k:(nz.count(k), k in 'KWBYO')) if len(nz)>=2 or (nz and nz[0] in 'YOGgWB') else '.'
+            o[y][x]=best
+    return o
+def hero_big(art):
+    g=[list(r) for r in art]
+    b=down2(scale3x(g))
+    # outline: transparent next to color but not K -> keep; ensure colored pixel next to transparent edge gets K
+    h=len(b); w=len(b[0]); o=[r[:] for r in b]
+    for y in range(h):
+        for x in range(w):
+            if b[y][x]=='.': continue
+            for dx,dy in ((1,0),(-1,0),(0,1),(0,-1)):
+                X,Y=x+dx,y+dy
+                if not(0<=X<w and 0<=Y<h) or b[Y][X]=='.':
+                    pass
+    return [''.join(r) for r in o]
+
 def gen_hero():
     import anim
     sheet(anim.hero_rows(), 16, 16, idx_hero, HPAL, os.path.join(OUT, 'hero.png'))
+    sheet([[hero_big(a) for a in row] for row in anim.hero_rows()], 24, 24, idx_hero, HPAL, os.path.join(OUT, 'hero_grande.png'))
     ch = anim.chick_frames(CHICK)
     sheet([ch], 16, 16, idx_hero, HPAL, os.path.join(OUT, 'chick.png'))
     # same frames as BG tiles (4 tiles per frame) to animate the chicks lying on the map
@@ -340,6 +389,7 @@ def gen_enemies():
 # ------------------------------------------------------------------ FONT (96 chars, PAL index 15 white / 14 shadow)
 EXTRA_GLYPHS = {
  '>': ["#....",".#...","..#..","...#.","..#..",".#...","#...."],
+ '^': ["..#..",".###.","#####",".....",".....",".....","....."],
  '<': ["....#","...#.","..#..",".#...","..#..","...#.","....#"],
  '|': ["..#..","..#..","..#..","..#..","..#..","..#..","..#.."],
  '=': [".....",".....","#####",".....","#####",".....","....."],

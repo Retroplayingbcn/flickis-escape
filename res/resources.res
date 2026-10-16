@@ -36,6 +36,7 @@ TILESET ts_items "gen/items.png" NONE NONE
 TILESET ts_hud "gen/hud.png" NONE NONE
 TILESET ts_font "gen/font.png" NONE NONE
 SPRITE hero_sprite "gen/hero.png" 2 2 FAST 0
+SPRITE hero_grande_sprite "gen/hero_grande.png" 3 3 FAST 0
 SPRITE chick_sprite "gen/chick.png" 2 2 FAST 8
 SPRITE hunter_sprite "gen/hunter.png" 3 3 FAST 0
 TILESET ts_chick_anim "gen/chick_tiles.png" NONE NONE

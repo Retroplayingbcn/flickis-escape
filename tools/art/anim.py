@@ -241,13 +241,13 @@ def star_frames():
         rows.append(_S(g))
     return [rows]
 
-POPUPS = ["+100", "+200", "+300", "+400", "+500", "+600", "+700", "+800", "+900", "+1000", "+250", "1UP"]
+POPUPS = ["+100", "+200", "+300", "+400", "+500", "+600", "+700", "+800", "+900", "+1000", "+250", "1UP", "!"]
 def popup_frames(font):
     rows = []
     for t in POPUPS:
         g = _blank(32, 8)
         w = len(t) * 6 - 1; ox = (32 - w) // 2
-        col = 'G' if t == "1UP" else 'Y'
+        col = 'G' if t == "1UP" else ('R' if t == "!" else 'Y')
         for i, ch in enumerate(t):
             gl = font.get(ch) or font[' ']
             for y in range(7):
