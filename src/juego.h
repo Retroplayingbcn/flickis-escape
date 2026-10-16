@@ -33,7 +33,7 @@ enum { ITEM_POLLUELO, ITEM_RELOJ, ITEM_RAYO, ITEM_GEMA, ITEM_CARA, ITEM_HUEVO };
 
 // ---------------------------------------------------------------- estados
 enum { ESTADO_TITULO, ESTADO_MENU, ESTADO_JUEGO, ESTADO_GAMEOVER, ESTADO_FINJUEGO, ESTADO_CONTINUE,
-       ESTADO_INTRO, ESTADO_COMO_JUGAR, ESTADO_MENU_VERSUS, ESTADO_IDIOMA, ESTADO_HISTORIA };
+       ESTADO_INTRO, ESTADO_COMO_JUGAR, ESTADO_MENU_VERSUS, ESTADO_IDIOMA, ESTADO_HISTORIA, ESTADO_PASSWORD };
 
 enum { MUNDO_BOSQUE, MUNDO_VOLCAN, MUNDO_MARINO, MUNDO_CELESTE };
 #define FASE_JEFE        6       // la sexta fase de cada mundo es el enfrentamiento final
@@ -84,6 +84,7 @@ extern u8 estado_actual;
 extern u8 mapa[MAP_HEIGHT][MAP_WIDTH];
 extern bool alcanzable[MAP_HEIGHT][MAP_WIDTH];
 extern u8 distancia[MAP_HEIGHT][MAP_WIDTH];
+extern u8 deco[MAP_HEIGHT][MAP_WIDTH];        // adornos del suelo (0 = nada, 1..5)
 
 extern u16 d_sel, max_polluelos_nivel, semillas_en_fila, total_salvados, municion;
 extern Sprite* sprites_seguidores[MAX_POLLUELOS];
@@ -108,6 +109,13 @@ extern bool p1_es_pajaro, ganador_fue_pajaro;
 extern u16 versus_ronda;
 extern s16 timer_enredado, timer_flicky_lento, timer_cazador_rapido;
 #define VICTORIAS_PARA_GANAR ((u32)((versus_victorias_req + 1) / 2))   // al mejor de 3 = gana quien llega a 2
+// jefes: Flicki crece con la fuerza de sus polluelos; cada polluelo es un corazón
+extern s16 corazones;
+extern bool flicky_grande;
+extern s16 password_mundo;                      // último jefe alcanzado (-1 = ninguno)
+#define MAX_CORAZONES 3
+#define FLICKY_SPR_X (flicky.x - (flicky_grande ? 4 : 0))
+#define FLICKY_SPR_Y (flicky.y - (flicky_grande ? 8 : 0))
 #define BR_ACTIVO (modo_battle_royale && modo_jugadores == 1)
 #define ENREDO_FRAMES 40
 #define RECARGA_RED   240
@@ -136,6 +144,7 @@ extern u16 base_maze, base_floor, base_items, base_hud;
 void cargar_graficos_mundo();
 void generar_mapa_aleatorio();
 void generar_arena();
+void decorar(u16 n);
 void calcular_alcanzables();
 void calcular_distancias(s16 cx, s16 cy);
 void repartir_polluelos_seguros();
@@ -174,7 +183,7 @@ void fx_scroll_actualizar();
 void fx_fundido_salida();
 void fx_fundido_entrada();
 void banner(const char* txt);
-enum { POP_100, POP_200, POP_300, POP_400, POP_500, POP_600, POP_700, POP_800, POP_900, POP_1000, POP_250, POP_1UP };
+enum { POP_100, POP_200, POP_300, POP_400, POP_500, POP_600, POP_700, POP_800, POP_900, POP_1000, POP_250, POP_1UP, POP_AVISO };
 
 // ---------------------------------------------------------------- jugador.c
 void jugador_crear(s16 cx, s16 cy);
@@ -185,6 +194,9 @@ void jugador_golpeado();
 void dispersar_polluelos();
 bool polluelo_volar(s16 sx, s16 sy);
 void jugador_enredar();
+void jugador_crecer(bool grande);
+void jugador_herido_jefe();
+void polluelos_poder();
 u16 municion_max();
 void polluelos_voladores_actualizar();
 void polluelos_reset();
@@ -215,6 +227,7 @@ void jefe_actualizar();
 bool jefe_impacto(s16 x, s16 y);
 bool jefe_toca(s16 x, s16 y, s16 radio);
 void jefe_reset();
+bool jefe_caer();
 s16 jefe_vida();
 s16 jefe_vida_max();
 const char* jefe_nombre();
@@ -249,6 +262,12 @@ void mostrar_pantalla_continue();
 void mostrar_game_over();
 void mostrar_enhorabuena();
 void mostrar_ganador_versus();
+void mostrar_password();
+void password_entrada(u16 pulsado);
+
+// ---------------------------------------------------------------- password.c
+const char* password_de(u16 mundo, u16 dif);
+bool password_validar(const char* clave, u16* mundo, u16* dif);
 extern bool titulo_parpadeo;
 
 #endif

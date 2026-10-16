@@ -107,9 +107,9 @@ void proyectiles_actualizar() {
             }
             continue;
         }
-        if (!flicky_invulnerable && abs(px - flicky.x) < 11 && abs(py - flicky.y) < 11) {
-            jugador_muere(T("EL JEFE TE ALCANZO!", "THE BOSS GOT YOU!"));
-            return;
+        if (!flicky_invulnerable && abs(px - flicky.x) < 7 && abs(py - flicky.y) < 7) {   // núcleo pequeño: justo
+            jugador_herido_jefe();
+            if (estado_actual != ESTADO_JUEGO) return;
         }
     }
 }

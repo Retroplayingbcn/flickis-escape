@@ -10,6 +10,7 @@ static void empezar_partida() {
     mundo_actual = MUNDO_BOSQUE;
     vidas = 1;
     proximo_hito_vida = PUNTOS_VIDA_EXTRA;
+    password_mundo = -1;
     flicky.puntuacion = 0;
     municion = 0;
     victorias_j1 = 0;
@@ -36,6 +37,7 @@ static void menu_principal(u16 pulsado) {
     else if (pulsado & BUTTON_A)     modo_juego_seleccionada = 0;
     else if (pulsado & BUTTON_B)     modo_juego_seleccionada = 1;
     else if (pulsado & BUTTON_MODE)  { idioma ^= 1; guardar_config(); pantalla_olvidar_imagen(); }
+    else if ((pulsado & BUTTON_C) && modo_jugadores == 0) { sonido(SFX_CLICK); mostrar_password(); return; }
     else if (pulsado & BUTTON_START) {
         sonido(SFX_CLICK);
         empezar_partida();
@@ -132,6 +134,7 @@ int main(bool hard) {
 
             case ESTADO_MENU:        menu_principal(pulsado); break;
             case ESTADO_MENU_VERSUS: menu_versus(pulsado); break;
+            case ESTADO_PASSWORD:    password_entrada(pulsado); break;
 
             case ESTADO_COMO_JUGAR:
                 if (pulsado & BUTTON_START) { sonido(SFX_CLICK); estado_actual = ESTADO_INTRO; mostrar_intro_mundo_actual(); }

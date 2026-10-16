@@ -172,6 +172,7 @@ void mostrar_menu_opciones() {
     menu_opcion(T("MEDIO    3 MIN  10 POLLUELOS", "NORMAL   3 MIN  10 CHICKS"), 4, 20, d_sel == 1);
     menu_opcion(T("DIFICIL  5 MIN  15 POLLUELOS", "HARD     5 MIN  15 CHICKS"), 4, 21, d_sel == 2);
     if (modo_jugadores == 1) menu_texto(T("2 JUGADORES: OPCIONES TRAS START", "2 PLAYERS: OPTIONS AFTER START"), T(4, 5), 23, PAL3);
+    else menu_texto(T("C: PASSWORD (EMPEZAR EN UN JEFE)", "C: PASSWORD (START AT A BOSS)"), T(4, 5), 23, PAL3);
 
     menu_texto(T("START: JUGAR    MODE: IDIOMA", "START: PLAY    MODE: LANGUAGE"), T(7, 6), 25, PAL1);
 }
@@ -345,6 +346,10 @@ void mostrar_pantalla_continue() {
     if (vidas == 1) strcpy(buf, T("TE QUEDA 1 VIDA", "1 LIFE LEFT"));
     else sprintf(buf, T("TE QUEDAN %d VIDAS", "%d LIVES LEFT"), vidas);
     texto_centrado(buf, 12);
+    if (password_mundo >= 0) {
+        sprintf(buf, "PASSWORD: %s", password_de(password_mundo, d_sel));
+        texto_centrado(buf, 14);
+    }
     pantalla_sprite(&hero_sprite, 152, 160, PAL2, ANIM_HERIDO, 0, FALSE);
     musica_segun_estado(ESTADO_CONTINUE);
     titulo_parpadeo = TRUE;
@@ -361,6 +366,10 @@ void mostrar_game_over() {
     char buf[40];
     sprintf(buf, T("PUNTOS %06ld   RECORD %06ld", "SCORE %06ld   RECORD %06ld"), flicky.puntuacion, puntuacion_maxima);
     texto_centrado(buf, 12);
+    if (password_mundo >= 0) {
+        sprintf(buf, T("PASSWORD DEL JEFE: %s", "BOSS PASSWORD: %s"), password_de(password_mundo, d_sel));
+        texto_centrado(buf, 14);
+    }
     pantalla_sprite(&hunter_sprite, 176, 152, PAL3, ANIM_LADO, 0, TRUE);
     pantalla_sprite(&hero_sprite, 136, 160, PAL2, ANIM_HERIDO, 0, FALSE);
     musica_segun_estado(ESTADO_GAMEOVER);
@@ -404,4 +413,65 @@ void mostrar_ganador_versus() {
     texto_centrado(buf, 13);
     musica_segun_estado(ESTADO_FINJUEGO);
     titulo_parpadeo = TRUE;
+}
+
+// ------------------------------------------------------------------ password
+static char clave[5] = "AAAA";
+static u16 clave_pos = 0;
+static s16 clave_error = 0;
+
+static void password_dibujar() {
+    char buf[2] = { 0, 0 };
+    for (u16 i = 0; i < 4; i++) {
+        buf[0] = clave[i];
+        menu_texto(buf, 16 + i * 2, 13, i == clave_pos ? PAL1 : PAL0);
+        menu_texto(i == clave_pos ? "^" : " ", 16 + i * 2, 14, PAL1);
+    }
+    menu_texto(clave_error ? T("PASSWORD INCORRECTO", "WRONG PASSWORD") : "                   ", T(11, 13), 17, PAL3);
+}
+
+void mostrar_password() {
+    estado_actual = ESTADO_PASSWORD;
+    pantalla_imagen(IMG(bg_opciones));
+    VDP_loadFont(&ts_font_menu, DMA);
+    menu_paletas(IMG(bg_opciones));
+    musica_segun_estado(ESTADO_MENU);
+    clave_pos = 0; clave_error = 0;
+    menu_texto("PASSWORD", 16, 8, PAL1);
+    menu_texto(T("CONTINUA DESDE EL JEFE DE UN MUNDO", "CONTINUE FROM A WORLD BOSS"), T(3, 7), 10, PAL3);
+    menu_texto(T("ARR/ABA: LETRA   IZQ/DER: MOVER", "UP/DOWN: LETTER   LEFT/RIGHT: MOVE"), T(4, 3), 21, PAL3);
+    menu_texto(T("START: ACEPTAR    B: VOLVER", "START: OK          B: BACK"), T(6, 6), 23, PAL1);
+    password_dibujar();
+}
+
+void password_entrada(u16 pulsado) {
+    if (pulsado & BUTTON_UP)         clave[clave_pos] = (clave[clave_pos] == 'Z') ? 'A' : clave[clave_pos] + 1;
+    else if (pulsado & BUTTON_DOWN)  clave[clave_pos] = (clave[clave_pos] == 'A') ? 'Z' : clave[clave_pos] - 1;
+    else if (pulsado & BUTTON_LEFT)  clave_pos = (clave_pos + 3) & 3;
+    else if (pulsado & (BUTTON_RIGHT | BUTTON_A | BUTTON_C)) clave_pos = (clave_pos + 1) & 3;
+    else if (pulsado & BUTTON_B)     { sonido(SFX_CLICK); estado_actual = ESTADO_MENU; mostrar_menu_opciones(); return; }
+    else if (pulsado & BUTTON_START) {
+        u16 m, d;
+        if (password_validar(clave, &m, &d)) {
+            sonido(SFX_META);
+            // empieza la partida en el jefe de ese mundo
+            total_partidas++;
+            modo_jugadores = 0; modo_juego_seleccionada = 0;
+            d_sel = d; mundo_actual = m; fase_actual = FASE_JEFE;
+            vidas = 2; municion = 2;
+            flicky.puntuacion = 0; proximo_hito_vida = PUNTOS_VIDA_EXTRA;
+            max_polluelos_nivel = (d_sel == 0) ? 5 : ((d_sel == 1) ? 10 : 15);
+            password_mundo = m;
+            estado_actual = ESTADO_INTRO;
+            mostrar_intro_mundo_actual();
+            return;
+        }
+        sonido(SFX_ATRAPADO);
+        clave_error = 1;
+        password_dibujar();
+        return;
+    } else return;
+    sonido(SFX_CLICK);
+    clave_error = 0;
+    password_dibujar();
 }

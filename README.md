@@ -40,7 +40,9 @@ Este repositorio demuestra cómo una IA puede comprender arquitecturas de hardwa
 *   **Efectos:** fundidos, marcador fijo con scroll por líneas, olas en el mar, lava y estrellas con ciclo de paleta, estrellitas al recibir un golpe, polluelos que salen volando, puntos flotantes, polvo y un nido que se va llenando.
 
 *   **Modo Historia:** 4 mundos temáticos (Bosque, Volcán, Mar y Cielo) de 6 fases, cada uno con su escenario y su enemigo: cazador, llama, tiburón y diablillo.
-*   **Jefes:** la sexta fase de cada mundo es un combate contra el enemigo gigante, con barra de vida, un ataque propio y música de jefe. Se le vence a huevazos.
+*   **Jefes:** la sexta fase de cada mundo es un combate contra el enemigo gigante, con barra de vida, un ataque propio y música de jefe. Antes de empezar, los polluelos que has salvado le dan su fuerza a Flicki, que crece; cada polluelo es un corazón (si te golpean, sale volando y puedes recuperarlo). El jefe avisa antes de atacar, se cansa después y se enfada a media vida. En la arena aparecen huevos, relojes, rayos y gemas.
+*   **Passwords:** al llegar al jefe de cada mundo se muestra un password de 4 letras; con C en el menú se puede empezar directamente en ese jefe.
+*   **Escenarios decorados:** flores, setas, corales, cristales, nubes y estrellas por el suelo, y tres disposiciones de arena para los jefes.
 *   **Huevos:** con A o B lanzas un huevo que deja aturdido al enemigo 3 segundos y le corta la rabia. Llevas hasta 3 y aparecen por el mapa.
 *   **Vidas:** cada fase superada da una vida, y también cada 5000 puntos.
 *   **Modo Libre:** Generación procedural de laberintos jugables sobre la marcha.

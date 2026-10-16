@@ -42,12 +42,13 @@ void hud_mensaje(const char* txt) {
 
 // Distribución (40 columnas):
 //   un jugador: [1-1] [huevo x3] [puntos] [reloj 3:00] [polluelo 00/10 | barra del jefe] [cara x1]
+//   jefe:       [JEFE] [huevo x3] [reloj 2:30] [barra del jefe] [polluelo x3 = corazones] [cara x1]
 //   versus:     [J1 n] [J2 n] [huevo x2] [reloj 3:00] [polluelo 00/10]
 void hud_actualizar() {
     char buf[20];
     bool total = (cache_tiempo == 0xFFFF);
     u16 col_huevo = (modo_jugadores == 1) ? 12 : 4;
-    u16 col_reloj = 16;
+    u16 col_reloj = en_jefe ? 9 : 16;
 
     if (total) {
         hud_icono(ITEM_HUEVO, col_huevo);
@@ -65,10 +66,10 @@ void hud_actualizar() {
             if (modo_juego_seleccionada == 1) hud_texto(T("LIB", "FRE"), 0);
             else if (en_jefe) hud_texto(T("JEFE", "BOSS"), 0);
             else { sprintf(buf, "%d-%d", mundo_actual + 1, fase_actual); hud_texto(buf, 0); }
-            if (!en_jefe) hud_icono(ITEM_POLLUELO, 23);
+            hud_icono(ITEM_POLLUELO, en_jefe ? 27 : 23);
             hud_icono(ITEM_CARA, 35);
         }
-        if (cache_puntos != flicky.puntuacion) {
+        if (!en_jefe && cache_puntos != flicky.puntuacion) {
             // el marcador "cuenta" hasta la puntuación real
             if (cache_puntos > flicky.puntuacion) cache_puntos = flicky.puntuacion;
             else {
@@ -79,9 +80,10 @@ void hud_actualizar() {
         }
         if (en_jefe) {
             s16 v = jefe_vida(), vm = jefe_vida_max();
-            if (cache_jefe != (u16)v) {
-                cache_jefe = v;
-                for (s16 i = 0; i < vm && i < 12; i++) hud_texto(i < v ? "#" : "_", 23 + i);
+            if (cache_jefe != (u16)(v * 16 + corazones)) {
+                cache_jefe = v * 16 + corazones;
+                for (s16 i = 0; i < vm && i < 10; i++) hud_texto(i < v ? "#" : "_", 16 + i);
+                sprintf(buf, "x%d", corazones); hud_texto(buf, 29);
             }
         }
         if (cache_vidas != (u16)vidas) {
