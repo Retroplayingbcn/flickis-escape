@@ -117,6 +117,11 @@ def bass_line(chords, style):
             for i in range(dur // 12): ev.append((r if i % 4 != 3 else r + 12, 12))
         elif style == 'sway':
             for i in range(dur // 48): ev.append(((r, r + 7)[i % 2], 48))
+        elif style == 'calypso':                       # saltarín: raíz con anticipo, quinta y octava
+            if dur >= 96:
+                for _ in range(dur // 96): ev += [(r, 18), (r, 6), (r + 7, 24), (r + 12, 12), (r + 7, 12), (r, 24)]
+            else:
+                ev += [(r, 18), (r, 6), (r + 7, 12), (r + 12, 12)]
         elif style == 'hold':
             ev.append((r, dur))
     return ev
@@ -145,6 +150,7 @@ DRUMS = {   # per bar of 16 sixteenths: k kick, s snare, . nothing ; hats separa
     'drive': ('k.k.s.k.k.k.s.k.', 'xxxxxxxxxxxxxxxx'),
     'half':  ('k.......s.......', 'x...x...x...x...'),
     'light': ('k.......k.......', '..x...x...x...x.'),
+    'calypso': ('k..s..k.k..s.kk.', 'x.xxx.xxx.xxx.xx'),
     'none':  ('................', '................'),
 }
 
@@ -233,12 +239,18 @@ add('volcan', "Flicki's Escape - Volcano", 160,
      'g4:8 bb4:8 d5:8 g5:8 f5:4 d5:4', 'f5:8 e5:8 d5:8 a4:8 f4:4 a4:4', 'bb4:4 d5:4 f5:4 bb5:4', 'a5:4 e5:4 c#5:4 a4:4'],
     bass='drive', drums='drive', lead=6)
 
-# ---------------------------------------------------------------- SEA (Eb major, swaying)
-add('marino', "Flicki's Escape - Sea", 112,
-    ['Eb', 'Cm', 'Ab', 'Bb', 'Eb', 'Gm', 'Ab Bb', 'Eb'],
-    ['g4:4. bb4:8 eb5:2', 'd5:4 c5:4 g4:2', 'ab4:4. c5:8 eb5:4 f5:4', 'd5:2. r:4',
-     'g5:4. f5:8 eb5:4 bb4:4', 'd5:4. eb5:8 d5:4 bb4:4', 'c5:4 eb5:4 d5:4 f5:4', 'eb5:2. r:4'],
-    bass='sway', drums='half', lead=3)
+# ---------------------------------------------------------------- SEA (Eb major, calypso alegre)
+add('marino', "Flicki's Escape - Sea", 144,
+    ['Eb', 'Cm', 'Ab', 'Bb', 'Eb', 'Gm', 'Ab Bb', 'Eb', 'Ab', 'Bb', 'Gm', 'Cm', 'Ab', 'Bb', 'Ab Bb', 'Eb'],
+    ['bb4:8 eb5:8 r:8 g5:8 r:8 f5:8 eb5:8 bb4:8', 'c5:8 eb5:8 r:8 g5:4 f5:8 eb5:8 c5:8',
+     'ab4:8 c5:8 eb5:8 ab5:8 r:8 g5:8 f5:8 eb5:8', 'f5:4 d5:8 bb4:8 r:8 bb4:8 c5:8 d5:8',
+     'eb5:8 g5:8 bb5:8 g5:8 r:8 bb5:8 ab5:8 g5:8', 'g5:8 f5:8 d5:8 bb4:8 r:8 d5:8 f5:8 g5:8',
+     'ab5:8 g5:8 f5:8 eb5:8 d5:8 eb5:8 f5:8 d5:8', 'eb5:4 r:8 bb4:8 eb5:8 g5:8 bb5:4',
+     'c6:8 bb5:8 ab5:8 r:8 eb5:8 ab5:8 r:8 c6:8', 'bb5:8 ab5:8 f5:8 r:8 d5:8 f5:8 r:8 bb5:8',
+     'g5:8 f5:8 g5:8 bb5:8 r:8 g5:8 d5:8 bb4:8', 'c5:8 d5:8 eb5:8 g5:8 c6:4 r:8 bb5:8',
+     'ab5:8 g5:8 ab5:8 c6:8 r:8 ab5:8 eb5:8 c5:8', 'd5:8 f5:8 bb5:8 d6:8 r:8 c6:8 bb5:8 f5:8',
+     'eb5:8 g5:8 c6:8 ab5:8 f5:8 ab5:8 d6:8 bb5:8', 'eb6:4 bb5:8 g5:8 eb5:4 r:4'],
+    bass='calypso', drums='calypso', lead=3, vol_lead=14)
 
 # ---------------------------------------------------------------- SKY (A major, airy)
 add('celeste', "Flicki's Escape - Sky", 132,

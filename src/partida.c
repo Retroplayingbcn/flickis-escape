@@ -14,10 +14,13 @@ u32 puntuacion_maxima = 0, proximo_hito_vida = PUNTOS_VIDA_EXTRA;
 bool juego_pausado = FALSE, cazador_en_furia = FALSE, flicky_invulnerable = FALSE, salida_abierta = FALSE, en_jefe = FALSE;
 s16 timer_duracion_furia = 0, timer_invulnerabilidad = 0;
 u16 modo_juego_seleccionada = 0, mundo_actual = MUNDO_BOSQUE, fase_actual = 1, modo_jugadores = 0;
-u32 total_partidas = 0, victorias_pajaro = 0, victorias_cazador = 0;
+u32 total_partidas = 0, victorias_j1 = 0, victorias_j2 = 0;
 u16 multiplicador_velocidad_minuto = 0;
 bool modo_battle_royale = FALSE, en_preaviso_cierre = FALSE;
-u16 anillo_recorte = 0;
+u16 anillo_recorte = 1;
+bool p1_es_pajaro = TRUE, ganador_fue_pajaro = TRUE;
+u16 versus_ronda = 1;
+s16 timer_enredado = 0, timer_flicky_lento = 0, timer_cazador_rapido = 0;
 u16 versus_sel = 0, versus_tiempo_idx = 2, versus_victorias_req = 3, versus_mundo_idx = 4;
 bool historia_desde_menu = FALSE;
 
@@ -27,7 +30,6 @@ void resetear_tiempo_nivel() {
     static const s16 t_versus[4] = { 60, 90, 120, 180 };
     static const s16 t_dif[3] = { 120, 180, 300 };
     if (modo_jugadores == 1) tiempo_restante_segundos = t_versus[versus_tiempo_idx];
-    else if (modo_battle_royale) tiempo_restante_segundos = 120;
     else tiempo_restante_segundos = t_dif[d_sel];
     tiempo_inicial = tiempo_restante_segundos;
 }
@@ -51,10 +53,12 @@ void inicializar_juego() {
     total_salvados = 0; semillas_en_fila = 0; frame_counter = 0;
     multiplicador_velocidad_minuto = 0;
     timer_cazador_lento = 0; timer_flicky_rapido = 0; timer_spawn_powerup = 150;
-    anillo_recorte = 0; en_preaviso_cierre = FALSE; salida_abierta = FALSE;
+    anillo_recorte = 1; en_preaviso_cierre = FALSE; salida_abierta = FALSE;   // el anillo 1 es el borde exterior
+    timer_enredado = 0; timer_flicky_lento = 0; timer_cazador_rapido = 0;
     cazador_en_furia = FALSE; timer_duracion_furia = 0;
     flicky_invulnerable = FALSE; timer_invulnerabilidad = 0;
-    if (municion < 1) municion = 1;                     // cada ronda empieza al menos con un huevo
+    if (modo_jugadores == 1) municion = 1;              // en versus, cada ronda empieza igual
+    else if (municion < 1) municion = 1;                // cada ronda empieza al menos con un huevo
     if (en_jefe) { tiempo_restante_segundos = 120 + (2 - d_sel) * 30; tiempo_inicial = tiempo_restante_segundos; }
 
     if (en_jefe) generar_arena(); else generar_mapa_aleatorio();
@@ -100,9 +104,21 @@ void finalizar_partida() {
 // "¡Preparados!": el jugador ve el laberinto antes de que nada se mueva
 void preparados() {
     hud_actualizar();
-    banner(en_jefe ? jefe_nombre() : T("PREPARADOS...", "GET READY..."));
-    for (u16 f = 0; f < 110; f++) {
-        if (f == 80) { dibujar_mapa_completo(); banner(T("YA!", "GO!")); }
+    char buf[32];
+    u16 total = 110;
+    if (modo_jugadores == 1) {
+        // versus: número de ronda y quién lleva al pájaro
+        sprintf(buf, T("RONDA %d", "ROUND %d"), versus_ronda);
+        banner(buf);
+        total = 190;
+    } else banner(en_jefe ? jefe_nombre() : T("PREPARADOS...", "GET READY..."));
+    for (u16 f = 0; f < total; f++) {
+        if (modo_jugadores == 1 && f == 70) {
+            dibujar_mapa_completo();
+            sprintf(buf, T("PAJARO: J%d   CAZADOR: J%d", "BIRD: P%d   HUNTER: P%d"), p1_es_pajaro ? 1 : 2, p1_es_pajaro ? 2 : 1);
+            banner(buf);
+        }
+        if (f == total - 30) { dibujar_mapa_completo(); banner(T("YA!", "GO!")); }
         fx_scroll_actualizar();
         SPR_update();
         SYS_doVBlankProcess();
@@ -124,7 +140,6 @@ void jugador_muere(const char* motivo) {
     banner(motivo);
     musica_detener();
     sonido(SFX_ATRAPADO);
-    victorias_cazador++;
     SPR_setVisibility(flicky.sprite, VISIBLE);
     SPR_setAnim(flicky.sprite, ANIM_HERIDO); flicky.anim = ANIM_HERIDO; SPR_setHFlip(flicky.sprite, FALSE);
     for (u16 f = 0; f < 110; f++) {
@@ -146,7 +161,6 @@ void fase_superada(bool fue_jefe) {
     proyectiles_reset();
     musica_detener();
     musica_reiniciar(PISTA_SUPERADA);
-    victorias_pajaro++;
     banner(fue_jefe ? T("MUNDO SUPERADO!", "WORLD CLEAR!") : T("FASE SUPERADA!", "STAGE CLEAR!"));
     ganar_vida();                                       // cada fase completada da una vida
     secuencia_heroe(ANIM_FELIZ, 110, TRUE);
@@ -181,46 +195,86 @@ void fase_superada(bool fue_jefe) {
     }
 }
 
+// gano_pajaro: quién ganó la ronda por papel; el punto va al jugador que lo llevaba
 void verificar_fin_ronda_versus(bool gano_pajaro) {
-    if (gano_pajaro) victorias_pajaro++; else victorias_cazador++;
+    bool gana_j1 = (gano_pajaro == p1_es_pajaro);
+    if (gana_j1) victorias_j1++; else victorias_j2++;
+    ganador_fue_pajaro = gano_pajaro;
     fx_estallido(gano_pajaro ? cazador.x : flicky.x, gano_pajaro ? cazador.y : flicky.y);
     efecto_shake(16, 3);
+    musica_detener();
     sonido(gano_pajaro ? SFX_META : SFX_ATRAPADO);
-    for (u16 f = 0; f < 50; f++) { fx_actualizar(); fx_scroll_actualizar(); SPR_update(); SYS_doVBlankProcess(); }
+    muros_alerta(FALSE);
+    SPR_setVisibility(cazador.sprite, VISIBLE);
+    char buf[32];
+    banner(gana_j1 ? T("PUNTO PARA J1!", "POINT TO P1!") : T("PUNTO PARA J2!", "POINT TO P2!"));
+    for (u16 f = 0; f < 150; f++) {
+        if (f == 75) {
+            dibujar_mapa_completo();
+            sprintf(buf, T("J1  %d - %d  J2", "P1  %d - %d  P2"), (u16)victorias_j1, (u16)victorias_j2);
+            banner(buf);
+        }
+        fx_actualizar(); fx_scroll_actualizar(); SPR_update(); SYS_doVBlankProcess();
+    }
     finalizar_partida();
-    if (victorias_pajaro >= versus_victorias_req || victorias_cazador >= versus_victorias_req) {
+    if (victorias_j1 >= VICTORIAS_PARA_GANAR || victorias_j2 >= VICTORIAS_PARA_GANAR) {
         estado_actual = ESTADO_FINJUEGO;
         mostrar_ganador_versus();
         return;
     }
+    versus_ronda++;
+    p1_es_pajaro = !p1_es_pajaro;                     // se cambian los papeles
     resetear_tiempo_nivel();
     if (versus_mundo_idx == 4) mundo_actual = random() % 4;
     inicializar_juego();
 }
 
 // ------------------------------------------------------------------ battle royale: el laberinto se cierra
+// El anillo 1 es el borde exterior; cada cierre tapia el siguiente anillo (2, 3 y 4).
+// Los polluelos que pilla el muro saltan hacia dentro, y se recalcula qué queda conectado
+// para que nada (polluelos, jugadores, objetos) se quede encerrado en un hueco sin salida.
+static bool fuera_del_anillo(s16 x, s16 y) {
+    return x < anillo_recorte || x >= MAP_WIDTH - anillo_recorte || y < anillo_recorte || y >= MAP_HEIGHT - anillo_recorte;
+}
+
 static void aplicar_recorte_battle_royale() {
     anillo_recorte++;
     en_preaviso_cierre = FALSE;
     muros_alerta(FALSE);
-    for (u16 y = 0; y < MAP_HEIGHT; y++) {
-        for (u16 x = 0; x < MAP_WIDTH; x++) {
-            if (x < anillo_recorte || x >= MAP_WIDTH - anillo_recorte || y < anillo_recorte || y >= MAP_HEIGHT - anillo_recorte) {
-                if (mapa[y][x] == TILE_POLLUELO) {
-                    if (modo_jugadores == 1) verificar_fin_ronda_versus(FALSE);
-                    else jugador_muere(T("UN POLLUELO QUEDO ATRAPADO!", "A CHICK GOT TRAPPED!"));
-                    return;
-                }
-                mapa[y][x] = TILE_MURO;
-            }
+    calcular_distancias(NIDO_X, NIDO_Y);
+    for (s16 y = 0; y < MAP_HEIGHT; y++) {
+        for (s16 x = 0; x < MAP_WIDTH; x++) {
+            if (!fuera_del_anillo(x, y)) continue;
+            u8 t = mapa[y][x];
+            mapa[y][x] = TILE_MURO;
+            if (t == TILE_POLLUELO) polluelo_volar(x * CELDA, y * CELDA);
+        }
+    }
+    // lo que haya quedado aislado del nido también se rescata
+    calcular_alcanzables();
+    calcular_distancias(NIDO_X, NIDO_Y);
+    for (s16 y = 1; y < MAP_HEIGHT - 1; y++) {
+        for (s16 x = 1; x < MAP_WIDTH - 1; x++) {
+            if (alcanzable[y][x]) continue;
+            if (mapa[y][x] == TILE_POLLUELO) { mapa[y][x] = TILE_SUELO; polluelo_volar(x * CELDA, y * CELDA); }
+            else if (mapa[y][x] != TILE_MURO) mapa[y][x] = TILE_SUELO;
         }
     }
     dibujar_mapa_completo();
     sonido(SFX_CIERRE);
-    // si el cierre atrapa a alguien, se le empuja al pasillo libre más cercano
+    efecto_shake(12, 2);
+    // si el cierre atrapa a alguien, se le lleva al pasillo libre más cercano
     s16 cx, cy;
-    if (hay_muro((flicky.x + 8) >> CELDA_SHIFT, (flicky.y + 8) >> CELDA_SHIFT) && buscar_celda_libre(&cx, &cy, 0)) { flicky.x = cx * CELDA; flicky.y = cy * CELDA; flicky.x_vel = flicky.y_vel = 0; }
-    if (cazador.sprite && hay_muro((cazador.x + 8) >> CELDA_SHIFT, (cazador.y + 8) >> CELDA_SHIFT) && buscar_celda_libre(&cx, &cy, 4)) { cazador.x = cx * CELDA; cazador.y = cy * CELDA; cazador.x_vel = cazador.y_vel = 0; }
+    s16 fx = (flicky.x + 8) >> CELDA_SHIFT, fy = (flicky.y + 8) >> CELDA_SHIFT;
+    if ((hay_muro(fx, fy) || !alcanzable[fy][fx]) && buscar_celda_libre(&cx, &cy, 0)) {
+        fx_polvo(flicky.x, flicky.y);
+        flicky.x = cx * CELDA; flicky.y = cy * CELDA; flicky.x_vel = flicky.y_vel = 0;
+    }
+    s16 hx = (cazador.x + 8) >> CELDA_SHIFT, hy = (cazador.y + 8) >> CELDA_SHIFT;
+    if (cazador.sprite && (hay_muro(hx, hy) || !alcanzable[hy][hx]) && buscar_celda_libre(&cx, &cy, 4)) {
+        fx_polvo(cazador.x, cazador.y);
+        cazador.x = cx * CELDA; cazador.y = cy * CELDA; cazador.x_vel = cazador.y_vel = 0;
+    }
 }
 
 // ------------------------------------------------------------------ entrega en el nido
@@ -266,7 +320,7 @@ void actualizar_logica() {
     }
 
     // pulso suave de los muros en rabia o antes de un cierre (sin parpadeo brusco)
-    if (cazador_en_furia || (modo_battle_royale && en_preaviso_cierre)) {
+    if (cazador_en_furia || (BR_ACTIVO && en_preaviso_cierre)) {
         u16 f = (frame_counter >> 1) & 15;
         muros_mezcla(f < 8 ? f : 16 - f);
     }
@@ -289,10 +343,12 @@ void actualizar_logica() {
                     muros_alerta(FALSE);
                 }
             }
-            if (modo_battle_royale) {
+            if (BR_ACTIVO) {
+                // tres cierres repartidos por la ronda (a 2/3, 2/5 y 1/6 del tiempo), con 5 s de aviso
                 s32 t = tiempo_restante_segundos;
-                if (t == 85 || t == 55 || t == 25) en_preaviso_cierre = TRUE;
-                if (t == 80 || t == 50 || t == 20) {
+                s32 c1 = tiempo_inicial * 2 / 3, c2 = tiempo_inicial * 2 / 5, c3 = tiempo_inicial / 6;
+                if (t == c1 + 5 || t == c2 + 5 || t == c3 + 5) en_preaviso_cierre = TRUE;
+                if (t == c1 || t == c2 || t == c3) {
                     aplicar_recorte_battle_royale();
                     if (estado_actual != ESTADO_JUEGO) return;
                 }
@@ -339,7 +395,7 @@ void actualizar_logica() {
     }
 
     // con poco tiempo el enemigo parpadea (aviso)
-    if (cazador.oculto == 0)
+    if (cazador.oculto == 0 && modo_jugadores == 0)
         SPR_setVisibility(cazador.sprite, ((tiempo_restante_segundos <= 15 || en_preaviso_cierre) && (frame_counter & 8)) ? HIDDEN : VISIBLE);
     cazador_actualizar();
 

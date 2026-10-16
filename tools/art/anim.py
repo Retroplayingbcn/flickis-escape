@@ -278,13 +278,18 @@ def dust_frames():
 
 def projectile_frames():
     def net(k):
+        # red de cuerda clara con sombra oscura: se lee bien sobre cualquier suelo
         g = _blank(16, 16)
-        for y in range(2, 14):
-            for x in range(2, 14):
-                if ((x + y + k) % 4 == 0 or (x - y + k) % 4 == 0) and _m.hypot(x - 7.5, y - 7.5) < 6.5: g[y][x] = 'c'
-        for a in range(24):
-            ang = a * _m.pi / 12; x = int(7.5 + 6.5 * _m.cos(ang)); y = int(7.5 + 6.5 * _m.sin(ang))
-            g[y][x] = 'K'
+        for y in range(1, 15):
+            for x in range(1, 15):
+                r = _m.hypot(x - 7.5, y - 7.5)
+                if r >= 6.6: continue
+                if (x + y + k) % 4 == 0 or (x - y + k) % 4 == 0: g[y][x] = 'W'
+                elif (x + y + k) % 4 == 1 or (x - y + k) % 4 == 3: g[y][x] = 'K'
+        for a in range(32):
+            ang = a * _m.pi / 16
+            g[int(round(7.5 + 6.9 * _m.sin(ang)))][int(round(7.5 + 6.9 * _m.cos(ang)))] = 'K'
+            g[int(round(7.5 + 6.0 * _m.sin(ang)))][int(round(7.5 + 6.0 * _m.cos(ang)))] = 'c'
         return _S(g)
     def fire(k):
         g = _blank(16, 16)

@@ -44,9 +44,10 @@ Este repositorio demuestra cómo una IA puede comprender arquitecturas de hardwa
 *   **Huevos:** con A o B lanzas un huevo que deja aturdido al enemigo 3 segundos y le corta la rabia. Llevas hasta 3 y aparecen por el mapa.
 *   **Vidas:** cada fase superada da una vida, y también cada 5000 puntos.
 *   **Modo Libre:** Generación procedural de laberintos jugables sobre la marcha.
-*   **Modo Versus (2 Jugadores):** Acción multijugador local en el que el segundo jugador controla directamente al cazador.
+*   **Modo Versus (2 Jugadores):** uno lleva a Flicki y el otro al cazador, y los papeles se cambian cada ronda. El pájaro gana si entrega los polluelos; el cazador, si lo atrapa o se acaba el tiempo. El pájaro lanza huevos (aturden) y el cazador, redes (enredan y le quitan un polluelo). Al mejor de 1, 3 o 5 rondas.
+*   **Battle Royale (en versus):** el laberinto se cierra tres veces durante la ronda; los polluelos que pilla el muro saltan hacia dentro.
 *   **Mecánica de Dispersión:** Al recibir un golpe llevando polluelos, estos se esparcirán por el mapa y ganarás unos segundos de inmunidad para recuperarlos.
-*   **Modo Rabia:** El cazador duplica su velocidad durante 8 segundos y anula tu protección por polluelos. ¡Un solo toque es muerte instantánea!
+*   **Modo Rabia (1 jugador):** El cazador duplica su velocidad durante 8 segundos y anula tu protección por polluelos. ¡Un solo toque es muerte instantánea!
 *   **Power-Ups:** Relojes de ralentización, rayos de velocidad y gemas de puntuación para conseguir vidas extra.
 
 ---

@@ -27,7 +27,7 @@ extern const u8 sfx_explosion[12032];
 extern const u8 sfx_unavida[7680];
 extern const u8 sfx_teleport[3328];
 extern const u8 sfx_red[2048];
-extern const u8 musica[25856];
+extern const u8 musica[26880];
 extern const Image bg_title;
 extern const Image bg_opciones;
 extern const Image bg_game_over;

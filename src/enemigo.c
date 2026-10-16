@@ -39,7 +39,7 @@ bool cazador_peligroso() { return cazador.aturdido == 0 && cazador.oculto == 0; 
 // un huevo le da: se queda aturdido; si estaba en rabia, se le pasa
 void cazador_aturdir() {
     if (cazador.aturdido > 0 || cazador.inmune > 0 || cazador.oculto > 0) { sonido(SFX_CHOF); return; }
-    cazador.aturdido = 180;
+    cazador.aturdido = (modo_jugadores == 1) ? 120 : 180;     // contra una persona, 2 s
     cazador.embestida = 0;
     cazador.x = ((cazador.x + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
     cazador.y = ((cazador.y + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
@@ -53,7 +53,21 @@ void cazador_aturdir() {
 }
 
 // segundo jugador (modo versus)
-void cazador_entrada_humana(u16 joy2) {
+static s16 mira_x = -1, mira_y = 0;                   // última dirección del cazador humano
+
+// la red: recta, frena en los muros, con recarga; cada enemigo lanza lo suyo
+static void lanzar_red() {
+    if (cazador.recarga > 0 || cazador.aturdido > 0) { if (cazador.recarga > 0) sonido(SFX_CLICK); return; }
+    u16 tipo = (mundo_actual == MUNDO_BOSQUE) ? DISPARO_RED : DISPARO_BOLA;
+    disparo_jefe(tipo, cazador.x, cazador.y, mira_x * 40, mira_y * 40, 48);
+    cazador.recarga = RECARGA_RED;
+    sonido(SFX_RED);
+}
+
+void cazador_entrada_humana(u16 joy2, u16 pulsado2) {
+    if (cazador.x_vel || cazador.y_vel) { mira_x = cazador.x_vel; mira_y = cazador.y_vel; }
+    if (cazador.aturdido > 0) return;
+    if (pulsado2 & (BUTTON_A | BUTTON_B)) lanzar_red();
     s16 ox = cazador.x & CELDA_MASK, oy = cazador.y & CELDA_MASK;
     if (!((ox <= 3 || ox >= 13) && (oy <= 3 || oy >= 13))) return;
     s16 nx = 0, ny = 0;
@@ -172,8 +186,21 @@ static void dibujar() {
     } else if (estrellas_c) { SPR_releaseSprite(estrellas_c); estrellas_c = NULL; }
 }
 
+// versus: el cazador también aprovecha el reloj (frena al pájaro) y el rayo (corre más)
+static void cazador_recoger() {
+    s16 cx = (cazador.x + 8) >> CELDA_SHIFT, cy = (cazador.y + 8) >> CELDA_SHIFT;
+    u8 t = mapa[cy][cx];
+    if (t != TILE_RELOJ && t != TILE_RAYO) return;
+    mapa[cy][cx] = TILE_SUELO;
+    dibujar_celda(cx, cy);
+    fx_chispa(cx * CELDA, cy * CELDA);
+    if (t == TILE_RELOJ) { timer_flicky_lento = DURACION_PODER; timer_flicky_rapido = 0; sonido(SFX_RELOJ); }
+    else { timer_cazador_rapido = DURACION_PODER; timer_cazador_lento = 0; sonido(SFX_RAYO); efecto_shake(8, 2); }
+}
+
 void cazador_actualizar() {
-    if (cazador.recarga > 0) cazador.recarga--;
+    if (cazador.recarga > 0 && --cazador.recarga == 0 && modo_jugadores == 1) fx_chispa(cazador.x, cazador.y - 10);   // red lista
+    if (timer_cazador_rapido > 0) timer_cazador_rapido--;
     if (cazador.inmune > 0) cazador.inmune--;
     if (cazador.aturdido > 0) {
         if (--cazador.aturdido == 0) cazador.inmune = 120;
@@ -193,7 +220,7 @@ void cazador_actualizar() {
 
     // velocidad en octavos de píxel por frame
     u16 v;
-    if (modo_jugadores == 1) v = 8;
+    if (modo_jugadores == 1) v = (timer_cazador_lento > 0) ? 5 : (timer_cazador_rapido > 0) ? 12 : 8;
     else if (timer_cazador_lento > 0) v = 2;
     else if (cazador.embestida) v = 16;
     else if (cazador_en_furia) v = (mundo_actual == MUNDO_VOLCAN) ? 13 : 12;
@@ -201,6 +228,7 @@ void cazador_actualizar() {
         v = 4 + (semillas_en_fila >= 6 ? 2 : 0) + (multiplicador_velocidad_minuto > 3 ? 3 : multiplicador_velocidad_minuto)
               + (fase_actual >= 4 ? 1 : 0) + (d_sel == 2 ? 1 : 0) + (mundo_actual == MUNDO_VOLCAN ? 1 : 0);
     }
+    if (modo_jugadores == 1) cazador_recoger();
     cazador.acumulador += v;
     while (cazador.acumulador >= 8) { cazador.acumulador -= 8; paso(); }
 

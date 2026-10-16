@@ -123,7 +123,11 @@ static void bfs(s16 sx, s16 sy, bool solo_alcance) {
         }
     }
 }
-void calcular_alcanzables() { bfs(1, 1, TRUE); }
+// alcanzable desde el nido (o desde la esquina en la arena del jefe, donde el centro es una columna)
+void calcular_alcanzables() {
+    if (mapa[NIDO_Y][NIDO_X] != TILE_MURO) bfs(NIDO_X, NIDO_Y, TRUE);
+    else bfs(1, 1, TRUE);
+}
 void calcular_distancias(s16 cx, s16 cy) { bfs(cx, cy, FALSE); }
 
 void repartir_polluelos_seguros() {
@@ -307,8 +311,8 @@ void objetos_actualizar() {
 void generar_powerup_aleatorio() {
     s16 rx, ry;
     if (!buscar_celda_libre(&rx, &ry, 3)) return;
-    if (modo_battle_royale &&
-        (rx < anillo_recorte || rx >= MAP_WIDTH - anillo_recorte || ry < anillo_recorte || ry >= MAP_HEIGHT - anillo_recorte)) return;
+    u16 a = anillo_recorte + 1;                       // nada en el anillo que se va a cerrar
+    if (BR_ACTIVO && (rx < a || rx >= MAP_WIDTH - a || ry < a || ry >= MAP_HEIGHT - a)) return;
     u16 r = random() % 100;
     u8 tipo;
     if (multiplicador_velocidad_minuto > 0 || cazador_en_furia) {

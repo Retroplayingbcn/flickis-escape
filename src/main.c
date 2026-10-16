@@ -12,8 +12,8 @@ static void empezar_partida() {
     proximo_hito_vida = PUNTOS_VIDA_EXTRA;
     flicky.puntuacion = 0;
     municion = 0;
-    victorias_pajaro = 0;
-    victorias_cazador = 0;
+    victorias_j1 = 0;
+    victorias_j2 = 0;
     max_polluelos_nivel = (d_sel == 0) ? 5 : ((d_sel == 1) ? 10 : 15);
 }
 
@@ -35,7 +35,6 @@ static void menu_principal(u16 pulsado) {
     else if (pulsado & BUTTON_RIGHT) { if (modo_jugadores < 1) modo_jugadores++; else cambio = FALSE; }
     else if (pulsado & BUTTON_A)     modo_juego_seleccionada = 0;
     else if (pulsado & BUTTON_B)     modo_juego_seleccionada = 1;
-    else if (pulsado & BUTTON_C)     modo_battle_royale = !modo_battle_royale;
     else if (pulsado & BUTTON_MODE)  { idioma ^= 1; guardar_config(); pantalla_olvidar_imagen(); }
     else if (pulsado & BUTTON_START) {
         sonido(SFX_CLICK);
@@ -70,6 +69,8 @@ static void menu_versus(u16 pulsado) {
     } else if (pulsado & BUTTON_START) {
         sonido(SFX_CLICK);
         if (versus_sel == 4) { ir_al_menu(); return; }
+        victorias_j1 = 0; victorias_j2 = 0;
+        versus_ronda = 1; p1_es_pajaro = TRUE;
         resetear_tiempo_nivel();
         max_polluelos_nivel = 10;
         mundo_actual = (versus_mundo_idx == 4) ? (random() % 4) : versus_mundo_idx;
@@ -161,8 +162,11 @@ int main(bool hard) {
                     else { hud_forzar_redibujo(); musica_reanudar(); }
                 }
                 if (!juego_pausado) {
-                    jugador_entrada(joy, pulsado);
-                    if (modo_jugadores == 1) cazador_entrada_humana(joy2);
+                    if (modo_jugadores == 1) {
+                        // los papeles se alternan: cada ronda un mando lleva al pájaro
+                        if (p1_es_pajaro) { jugador_entrada(joy, pulsado); cazador_entrada_humana(joy2, pulsado2); }
+                        else { jugador_entrada(joy2, pulsado2); cazador_entrada_humana(joy, pulsado); }
+                    } else jugador_entrada(joy, pulsado);
                     actualizar_logica();
                 }
                 break;
