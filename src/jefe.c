@@ -44,6 +44,7 @@ static const SpriteDefinition* jefe_sprite_def() {
 }
 
 s16 jefe_vida()     { return jefe.vida; }
+bool jefe_derrotado() { return jefe.s && jefe.estado == J_DERROTA; }
 s16 jefe_vida_max() { return jefe.vida_max; }
 
 static void aviso_quitar() {
@@ -166,7 +167,14 @@ bool jefe_impacto(s16 x, s16 y) {
         jefe.estado = J_DERROTA; jefe.t = 0;
         musica_detener();
         sonido(SFX_EXPLOSION);
+        // golpe final: todo se congela un instante con un destello, y Flicki se detiene
+        flicky.x = ((flicky.x + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
+        flicky.y = ((flicky.y + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
+        flicky.x_vel = 0; flicky.y_vel = 0;
+        SPR_setAnim(flicky.sprite, ANIM_ABAJO); flicky.anim = ANIM_ABAJO; SPR_setFrame(flicky.sprite, 0);
         fx_destello();
+        for (u16 f = 0; f < 20; f++) { fx_scroll_actualizar(); SPR_update(); SYS_doVBlankProcess(); }
+        efecto_shake(20, 4);
         return TRUE;
     }
     if (!jefe.enfadado && jefe.vida * 2 <= jefe.vida_max) {

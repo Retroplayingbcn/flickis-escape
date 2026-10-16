@@ -29,6 +29,7 @@ extern const u8 sfx_teleport[3328];
 extern const u8 sfx_red[2048];
 extern const u8 musica[26880];
 extern const Image bg_title;
+extern const Image img_claro;
 extern const Image bg_opciones;
 extern const Image bg_game_over;
 extern const Image bg_fin_juego;

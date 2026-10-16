@@ -29,13 +29,14 @@ static const Palette* pal_maze_actual = &pal_bosque_maze;
 static const Palette* pal_floor_actual = &pal_bosque_floor;
 static s16 cola_x[MAP_WIDTH * MAP_HEIGHT], cola_y[MAP_WIDTH * MAP_HEIGHT];
 static u16 nivel_alerta = 0;
+static bool arena_pintada = FALSE;                // arena del bosque: el suelo es una imagen
 static const TileSet* ts_floor_actual = &ts_bosque_floor;
 
 bool muros_en_alerta() { return nivel_alerta != 0; }
 
 // ráfaga de viento (bosque): las flores y la hierba del suelo se doblan cambiando sus tiles en VRAM
 void deco_viento(bool doblado) {
-    if (mundo_actual != MUNDO_BOSQUE) return;
+    if (mundo_actual != MUNDO_BOSQUE || arena_pintada) return;
     const u32* t = ts_floor_actual->tiles;
     VDP_loadTileData(t + (doblado ? META_DOBLADO : META_DECO) * 4 * 8, base_floor + META_DECO * 4, 4, DMA);
     VDP_loadTileData(t + (doblado ? META_DOBLADO + 1 : META_DECO + 2) * 4 * 8, base_floor + (META_DECO + 2) * 4, 4, DMA);
@@ -145,33 +146,18 @@ static void arbol(s16 x, s16 y) {
     pieza(x, y + 1, PIEZA_ARBOL_BL); pieza(x + 1, y + 1, PIEZA_ARBOL_BR);
 }
 
-// Arena del bosque: un claro rodeado de árboles, con un cruce de caminos de tierra,
-// dos árboles grandes y un tronco caído (el mismo espacio libre que las otras arenas)
+// Arena del bosque: un claro pintado como imagen (img_claro). Los muros son el borde de árboles y el
+// estanque, que ya están en la imagen, y dos árboles grandes que se dibujan en el plano A.
 static void generar_claro() {
     memset(deco, 0, sizeof(deco));
     for (s16 y = 0; y < MAP_HEIGHT; y++)
         for (s16 x = 0; x < MAP_WIDTH; x++) {
             bool borde = (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1);
-            if (borde) pieza(x, y, ((x + y) & 1) ? PIEZA_FOLLAJE1 : PIEZA_FOLLAJE2);
-            else mapa[y][x] = TILE_SUELO;
+            mapa[y][x] = borde ? TILE_MURO : TILE_SUELO;
+            if (borde) deco[y][x] = DECO_PINTADO;
         }
-    for (s16 x = 1; x < MAP_WIDTH - 1; x++) deco[6][x] = DECO_CAMINO;
-    for (s16 y = 1; y < MAP_HEIGHT - 1; y++) deco[y][9] = DECO_CAMINO;
-    if (random() & 1) { arbol(4, 2); arbol(14, 8); pieza(12, 3, PIEZA_TRONCO_I); pieza(13, 3, PIEZA_TRONCO_D); }
-    else              { arbol(4, 8); arbol(14, 2); pieza(4, 3, PIEZA_TRONCO_I); pieza(5, 3, PIEZA_TRONCO_D); }
-    // flores y hierba a lo largo del borde, y algún adorno con volumen en lo abierto
-    for (s16 y = 1; y < MAP_HEIGHT - 1; y++)
-        for (s16 x = 1; x < MAP_WIDTH - 1; x++) {
-            if (mapa[y][x] != TILE_SUELO || deco[y][x]) continue;
-            bool junto_borde = (x == 1 || y == 1 || x == MAP_WIDTH - 2 || y == MAP_HEIGHT - 2);
-            if (junto_borde && (random() % 100) < 55) deco[y][x] = 1 + (random() % 4);
-        }
-    for (u16 i = 0, intentos = 0; i < 4 && intentos < 100; intentos++) {
-        s16 x = 2 + (random() % (MAP_WIDTH - 4)), y = 2 + (random() % (MAP_HEIGHT - 4));
-        if (mapa[y][x] != TILE_SUELO || deco[y][x] || (x <= 3 && y >= 5 && y <= 7)) continue;
-        deco[y][x] = 5 + (random() & 1);
-        i++;
-    }
+    for (s16 y = 8; y <= 9; y++) for (s16 x = 4; x <= 5; x++) { mapa[y][x] = TILE_MURO; deco[y][x] = DECO_PINTADO; }   // estanque
+    arbol(5, 2); arbol(13, 9);
 }
 
 // Arena del jefe: espacio abierto con columnas para cubrirse (en el bosque, un claro con árboles)
@@ -279,7 +265,9 @@ void dibujar_celda(s16 cx, s16 cy) {
     if (cx < 0 || cy < 0 || cx >= MAP_WIDTH || cy >= MAP_HEIGHT) return;
     u8 t = mapa[cy][cx];
     // plano A: muros (autotile por vecinos), nido u objetos
-    if (t == TILE_MURO && (deco[cy][cx] & DECO_ESPECIAL)) {
+    if (t == TILE_MURO && deco[cy][cx] == DECO_PINTADO) {
+        borrar_plano_a(cx, cy);
+    } else if (t == TILE_MURO && (deco[cy][cx] & DECO_ESPECIAL)) {
         poner_meta(BG_A, PAL0, base_maze + TILE_CLARO + (deco[cy][cx] & 7) * 4, cx, cy);   // árbol, tronco, follaje
     } else if (t == TILE_MURO) {
         u16 mask = (hay_muro(cx, cy - 1) ? 1 : 0) | (hay_muro(cx + 1, cy) ? 2 : 0) |
@@ -296,6 +284,7 @@ void dibujar_celda(s16 cx, s16 cy) {
             poner_meta(BG_A, PAL1, base_floor + (META_DECO + deco[cy][cx] - 1) * 4, cx, cy);
         else borrar_plano_a(cx, cy);
     }
+    if (arena_pintada) return;                            // el suelo es la imagen: no se toca el plano B
     if (deco[cy][cx] == DECO_CAMINO) {                    // camino de tierra: autotile con sus vecinos
         u16 m = (camino(cx, cy - 1) ? 1 : 0) | (camino(cx + 1, cy) ? 2 : 0) | (camino(cx, cy + 1) ? 4 : 0) | (camino(cx - 1, cy) ? 8 : 0);
         poner_meta(BG_B, PAL1, base_floor + (META_CAMINO + m) * 4, cx, cy);
@@ -303,11 +292,14 @@ void dibujar_celda(s16 cx, s16 cy) {
     }
     // plano B: suelo con sombra proyectada por los muros de arriba/izquierda
     u16 sombra = (da_sombra(cx, cy - 1) ? 1 : 0) | (da_sombra(cx - 1, cy) ? 2 : 0) | (da_sombra(cx - 1, cy - 1) ? 4 : 0);
-    u16 textura = ((cx * 7) + (cy * 13)) & 3;
+    // el césped del bosque es un patrón continuo de 32x32; los demás suelos varían al azar
+    u16 textura = (mundo_actual == MUNDO_BOSQUE) ? ((cx & 1) | ((cy & 1) << 1)) : (((cx * 7) + (cy * 13)) & 3);
     poner_meta(BG_B, PAL1, base_floor + (textura * 8 + sombra) * 4, cx, cy);
 }
 
 void dibujar_mapa_completo() {
+    if (arena_pintada)                                    // repinta la imagen (por si un cartel la tapó)
+        VDP_setTileMapEx(BG_B, img_claro.tilemap, TILE_ATTR_FULL(PAL1, 0, 0, 0, base_floor), 0, PLAY_TY, 0, 0, 40, 26, DMA);
     for (s16 y = 0; y < MAP_HEIGHT; y++)
         for (s16 x = 0; x < MAP_WIDTH; x++) dibujar_celda(x, y);
 }
@@ -325,11 +317,16 @@ void cargar_graficos_mundo() {
     else if (mundo_actual == MUNDO_CELESTE) { ts_maze = &ts_celeste_maze; ts_floor = &ts_celeste_floor; p_maze = &pal_celeste_maze; p_floor = &pal_celeste_floor; }
     pal_maze_actual = p_maze; pal_floor_actual = p_floor; ts_floor_actual = ts_floor;
     base_maze  = TILE_USER_INDEX;
+    // la arena del jefe del bosque es una imagen pintada: sus baldosas ocupan el sitio del suelo
+    arena_pintada = (en_jefe && mundo_actual == MUNDO_BOSQUE);
+    if (arena_pintada) { ts_floor = img_claro.tileset; p_floor = img_claro.palette; pal_floor_actual = p_floor; }
     base_floor = base_maze + ts_maze->numTile;
     base_items = base_floor + ts_floor->numTile;
     base_hud   = base_items + ts_items.numTile;
     VDP_loadTileSet(ts_maze, base_maze, DMA);
     VDP_loadTileSet(ts_floor, base_floor, DMA);
+    if (arena_pintada)
+        VDP_setTileMapEx(BG_B, img_claro.tilemap, TILE_ATTR_FULL(PAL1, 0, 0, 0, base_floor), 0, PLAY_TY, 0, 0, 40, 26, DMA);
     VDP_loadTileSet(&ts_items, base_items, DMA);
     VDP_loadTileSet(&ts_hud, base_hud, DMA);
     VDP_loadFont(&ts_font, DMA);
