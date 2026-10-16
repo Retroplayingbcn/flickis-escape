@@ -6,6 +6,8 @@
 #include "juego.h"
 
 static Sprite* estrellas_c = NULL;
+static Sprite* barra_red = NULL;          // versus: recarga de la red sobre la cabeza
+static s16 destello_listo = 0;            // versus: parpadeo blanco cuando la red vuelve a estar lista
 
 const SpriteDefinition* enemigo_del_mundo() {
     switch (mundo_actual) {
@@ -32,6 +34,8 @@ void cazador_crear(s16 cx, s16 cy) {
 void cazador_liberar() {
     if (estrellas_c) SPR_releaseSprite(estrellas_c);
     estrellas_c = NULL;
+    if (barra_red) SPR_releaseSprite(barra_red);
+    barra_red = NULL; destello_listo = 0;
 }
 
 bool cazador_peligroso() { return cazador.aturdido == 0 && cazador.oculto == 0; }
@@ -61,6 +65,10 @@ static void lanzar_red() {
     u16 tipo = (mundo_actual == MUNDO_BOSQUE) ? DISPARO_RED : DISPARO_BOLA;
     disparo_jefe(tipo, cazador.x, cazador.y, mira_x * 40, mira_y * 40, 48);
     cazador.recarga = RECARGA_RED;
+    if (!barra_red) {
+        barra_red = SPR_addSprite(&recarga_sprite, cazador.x, cazador.y + PLAY_Y - 18, TILE_ATTR(PAL2, 1, FALSE, FALSE));
+        if (barra_red) SPR_setDepth(barra_red, SPR_MIN_DEPTH);
+    }
     sonido(SFX_RED);
 }
 
@@ -172,6 +180,10 @@ static void dibujar() {
         else SPR_setFrame(cazador.sprite, 0);
     }
     s16 temblor = (cazador.aturdido && (frame_counter & 2)) ? 1 : 0;
+    if (barra_red) {                                     // la barra se llena de 0 a 7 durante la recarga
+        SPR_setFrame(barra_red, ((RECARGA_RED - cazador.recarga) * 8) / (RECARGA_RED + 1));
+        SPR_setPosition(barra_red, cazador.x + shake_x, cazador.y + PLAY_Y - 18);
+    }
     SPR_setPosition(cazador.sprite, cazador.x - 4 + shake_x + temblor, cazador.y + PLAY_Y - 8);
     // estrellitas mientras está aturdido
     if (cazador.aturdido) {
@@ -199,7 +211,13 @@ static void cazador_recoger() {
 }
 
 void cazador_actualizar() {
-    if (cazador.recarga > 0 && --cazador.recarga == 0 && modo_jugadores == 1) fx_chispa(cazador.x, cazador.y - 10);   // red lista
+    if (cazador.recarga > 0 && --cazador.recarga == 0 && modo_jugadores == 1) {   // red lista: destello y "clic"
+        fx_chispa(cazador.x, cazador.y - 10);
+        sonido(SFX_CLICK);
+        destello_listo = 10;
+        if (barra_red) { SPR_releaseSprite(barra_red); barra_red = NULL; }
+    }
+    if (destello_listo > 0) destello_listo--;
     if (timer_cazador_rapido > 0) timer_cazador_rapido--;
     if (cazador.inmune > 0) cazador.inmune--;
     if (cazador.aturdido > 0) {
@@ -239,7 +257,7 @@ void cazador_actualizar() {
 // rojo en rabia, azulado cuando el reloj lo frena, pálido cuando está aturdido
 void cazador_tinte_actualizar(bool forzar) {
     static u8 tinte_actual = 0xFF;
-    u8 tinte = cazador.aturdido ? 3 : cazador_en_furia ? 1 : (timer_cazador_lento > 0) ? 2 : 0;
+    u8 tinte = destello_listo > 0 ? ((destello_listo & 4) ? 4 : 0) : cazador.aturdido ? 3 : cazador_en_furia ? 1 : (timer_cazador_lento > 0) ? 2 : 0;
     if (forzar) tinte_actual = 0xFF;
     if (tinte == tinte_actual || cazador.def == NULL) return;
     tinte_actual = tinte;
@@ -250,6 +268,7 @@ void cazador_tinte_actualizar(bool forzar) {
         if (tinte == 1) { r = (r + 4 > 7) ? 7 : r + 4; g >>= 1; b >>= 1; }
         else if (tinte == 2) { b = (b + 3 > 7) ? 7 : b + 3; r >>= 1; }
         else if (tinte == 3) { r = (r + 7) >> 1; g = (g + 7) >> 1; b = (b + 7) >> 1; }
+        else if (tinte == 4) { r = (r + 14) / 3; g = (g + 14) / 3; b = (b + 14) / 3; }
         PAL_setColor(48 + i, (b << 9) | (g << 5) | (r << 1));
     }
 }

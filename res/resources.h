@@ -90,6 +90,8 @@ extern const SpriteDefinition estrellas_sprite;
 extern const SpriteDefinition popup_sprite;
 extern const SpriteDefinition polvo_sprite;
 extern const SpriteDefinition proyectil_sprite;
+extern const SpriteDefinition ambiente_sprite;
+extern const SpriteDefinition recarga_sprite;
 extern const SpriteDefinition jefe_cazador;
 extern const SpriteDefinition jefe_llama;
 extern const SpriteDefinition jefe_tiburon;

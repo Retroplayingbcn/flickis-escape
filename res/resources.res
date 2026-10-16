@@ -83,6 +83,8 @@ SPRITE estrellas_sprite "gen/estrellas.png" 3 1 FAST 0
 SPRITE popup_sprite "gen/popup.png" 4 1 FAST 0
 SPRITE polvo_sprite "gen/polvo.png" 2 2 FAST 4
 SPRITE proyectil_sprite "gen/proyectil.png" 2 2 FAST 6
+SPRITE ambiente_sprite "gen/ambiente.png" 2 2 FAST 6
+SPRITE recarga_sprite "gen/recarga.png" 2 1 FAST 0
 SPRITE jefe_cazador "gen/jefe_cazador.png" 6 6 FAST 0
 SPRITE jefe_llama "gen/jefe_llama.png" 6 6 FAST 0
 SPRITE jefe_tiburon "gen/jefe_tiburon.png" 6 6 FAST 0

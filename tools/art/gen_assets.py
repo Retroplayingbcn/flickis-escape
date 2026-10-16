@@ -135,6 +135,55 @@ def strip(tiles):
     for t in tiles: rows += t
     return rows
 
+# Arena del bosque ("claro"): árboles grandes, tronco caído y follaje para el borde (PAL0 del bosque:
+# 1-5 verdes del seto, 6-8 marrones del nido)
+def claro_tiles():
+    def arbol(X, Y):
+        dx, dy = X - 15.5, Y - 12.5
+        d = (dx / 14.5) ** 2 + (dy / 12.0) ** 2
+        # tronco
+        if 12 <= X <= 19 and Y >= 20:
+            if Y > 29 and (X < 13 or X > 18): return 0
+            return 6 if X < 14 else (8 if X > 17 else 7)
+        if 9 <= X <= 22 and Y >= 29 and abs(X - 15.5) < 6.5 - (31 - Y) * 2: return 8      # raíces
+        if d >= 1: return 0
+        # copa: bultos de hojas con luz arriba a la izquierda
+        n = hsh(X // 3, Y // 3, 5) % 100
+        bump = ((X % 6) - 3) ** 2 + ((Y % 5) - 2) ** 2
+        if d > 0.86: return 5
+        luz = (-dx - dy) / 20.0
+        c = 1
+        if luz > 0.25 or (luz > 0 and bump < 3): c = 3
+        if luz < -0.35 or (bump > 7 and n < 40): c = 2
+        if luz > 0.45 and n < 30: c = 4
+        return c
+    def tronco(X, Y):
+        if Y < 4 or Y > 13: return 0
+        if X < 5:                                            # corte con anillos
+            r = math.hypot(X - 4, Y - 8.5)
+            if r > 4.6: return 0
+            return 5 if r > 4 else (8 if int(r) % 2 else 6)
+        if X > 30 and (Y < 5 or Y > 12): return 0
+        if Y == 4 or Y == 13: return 5
+        c = 7 if (X + (Y // 3) * 5) % 9 else 8
+        if Y < 7: c = 6 if (X % 7) else 7
+        if hsh(X // 2, Y // 2, 3) % 100 < 10: c = 3           # musgo
+        return c
+    def follaje(X, Y, v):
+        n = hsh(X // 2 + v * 5, Y // 2 + v * 3, 9) % 100
+        bump = ((X + v * 3) % 8 - 4) ** 2 + ((Y + v * 5) % 7 - 3) ** 2
+        if bump < 3: return 3 if n < 70 else 4
+        if bump > 10: return 5 if n < 50 else 2
+        return 1 if n < 70 else 2
+    t = []
+    for (ox, oy) in ((0, 0), (16, 0), (0, 16), (16, 16)):
+        t += metatile_to_tiles(lambda x, y, ox=ox, oy=oy: arbol(x + ox, y + oy))
+    for ox in (0, 16):
+        t += metatile_to_tiles(lambda x, y, ox=ox: tronco(x + ox, y))
+    for v in (0, 1):
+        t += metatile_to_tiles(lambda x, y, v=v: follaje(x, y, v))
+    return t
+
 def gen_world(name):
     t = WORLDS[name]
     tiles = []
@@ -167,6 +216,8 @@ def gen_world(name):
     # HUD bar tiles: fill, bottom line
     tiles.append([[9]*8 for _ in range(8)])
     tiles.append([[9]*8 for _ in range(6)] + [[10]*8 for _ in range(2)])
+    if name == 'bosque':
+        tiles += claro_tiles()                             # metatiles desde el tile 98: árbol 2x2, tronco 2x1, follaje x2
     save_indexed(os.path.join(OUT, f'{name}_maze.png'), strip(tiles), 8, 8*len(tiles), pal0(t))
     # floor (PAL1): 8 shadow variants x 4 textures
     ftiles = []
@@ -180,10 +231,14 @@ def gen_world(name):
                     if (up and y < 2) or (le and x < 2): c = 5
                 return c
             ftiles += metatile_to_tiles(fpx)
-    # metatiles 32..36: adornos del suelo (se pintan en el plano A, sin colisión)
-    for fn in DECO.DECOS[name]:
+    # metatiles 32..37: adornos del suelo (se pintan en el plano A, sin colisión)
+    # 38..39: flores y hierba dobladas por el viento; 40..55: camino de tierra (solo bosque)
+    for fn in DECO.DECOS[name] + DECO.DOBLADOS.get(name, [DECO.DECOS[name][0], DECO.DECOS[name][2]]):
         g = fn()
         ftiles += metatile_to_tiles(lambda x, y, g=g: g[y][x])
+    if name == 'bosque':
+        for mask in range(16):
+            ftiles += metatile_to_tiles(lambda x, y, m=mask: DECO.camino(m, x, y) or floor_pixel(name, x, y, 0))
     save_indexed(os.path.join(OUT, f'{name}_floor.png'), strip(ftiles), 8, 8*len(ftiles), pal1(t, name))
     print(name, 'maze tiles', len(tiles), 'floor tiles', len(ftiles))
 
@@ -214,7 +269,11 @@ def art_tiles(art):
 
 def gen_items():
     tiles = []
-    for art in (CHICK, CLOCK, BOLT, GEM, HV.SIDE, EGG):     # 4 = HUD life icon, 5 = throwable egg
+    import anim
+    net = anim.projectile_frames()[0][0]
+    net_gris = [r.replace('c', 'K').replace('W', 'c') for r in net]
+    # 4 = icono de vidas, 5 = huevo, 6 = red lista, 7 = red recargando (marcador del versus)
+    for art in (CHICK, CLOCK, BOLT, GEM, HV.SIDE, EGG, net, net_gris):
         tiles += art_tiles(art)
     save_indexed(os.path.join(OUT, 'items.png'), strip(tiles), 8, 8*len(tiles), HPAL)
 
@@ -463,6 +522,8 @@ def gen_fx():
     sheet(anim.popup_frames(font), 32, 8, idx_hero, HPAL, os.path.join(OUT, 'popup.png'))
     sheet(anim.dust_frames(), 16, 16, idx_hero, HPAL, os.path.join(OUT, 'polvo.png'))
     sheet(anim.projectile_frames(), 16, 16, idx_hero, HPAL, os.path.join(OUT, 'proyectil.png'))
+    sheet(anim.ambient_frames(), 16, 16, idx_hero, HPAL, os.path.join(OUT, 'ambiente.png'))
+    sheet(anim.reload_frames(), 16, 8, idx_hero, HPAL, os.path.join(OUT, 'recarga.png'))
 
 def gen_bosses():
     # end-of-world bosses: the world enemy at double size (48x48)

@@ -308,3 +308,75 @@ def projectile_frames():
                 if d < 5.5 + (k & 1): g[y][x] = 'W' if d < 2 else ('Y' if d < 3.5 else ('O' if d < 5 else 'R'))
         return _S(g)
     return [[net(0), net(2)], [fire(0), fire(1)], [ball(0), ball(1)]]
+
+# ---------------- ambiente: hojas, brasas, ceniza, burbujas, mariposas, pajaritos (16x16, 4 fotogramas)
+def ambient_frames():
+    def leaf(k):
+        g = _blank(16, 16)
+        a = k * _m.pi / 4
+        for y in range(16):
+            for x in range(16):
+                dx, dy = x - 7.5, y - 7.5
+                u = dx * _m.cos(a) + dy * _m.sin(a); v = -dx * _m.sin(a) + dy * _m.cos(a)
+                d = (u / 4.6) ** 2 + (v / (2.4 if k % 2 == 0 else 1.5)) ** 2
+                if d < 1: g[y][x] = 'g' if abs(v) < 0.5 or d > 0.75 else ('G' if u < 2 else 'y')
+        return _S(g)
+    def ember(k):
+        g = _blank(16, 16)
+        r = (2.2, 1.8, 1.4, 0.9)[k]
+        for y in range(16):
+            for x in range(16):
+                d = _m.hypot(x - 7.5, y - 7.5)
+                if d < r: g[y][x] = 'Y' if d < r * 0.5 else ('O' if k < 3 else 'r')
+        return _S(g)
+    def ash(k):
+        g = _blank(16, 16)
+        for (x, y) in ((6, 7), (9, 9), (7, 10))[:3 - (k == 3)]:
+            xx = x + (1 if k in (1, 2) else 0)
+            g[y][xx] = 'c'; g[y][xx + 1] = 'K' if k % 2 else 'c'
+        return _S(g)
+    def bubble(k):
+        g = _blank(16, 16)
+        r = 2.4 + (k % 2) * 0.5
+        for y in range(16):
+            for x in range(16):
+                d = _m.hypot(x - 7.5, y - 7.5)
+                if r - 1 < d < r: g[y][x] = 'W' if (x < 8 and y < 8) else 'b'
+        g[6][6] = 'W'
+        return _S(g)
+    def butterfly(k):
+        g = _blank(16, 16)
+        w = (3.2, 2.2, 1.0, 2.2)[k]                 # alas abiertas -> cerradas
+        for y in range(16):
+            for x in range(16):
+                dx, dy = abs(x - 7.5), y - 7.5
+                if dx < 0.6 and -3 < dy < 3: g[y][x] = 'K'
+                elif dx >= 0.6 and dx < 0.6 + w * 1.4 and ((dy + 1.5) / 2.6) ** 2 + ((dx - 0.6 - w * 0.7) / (w * 0.75 + 0.1)) ** 2 < 1:
+                    g[y][x] = 'P' if dy < 0 else 'Y'
+        g[4][6] = 'K'; g[4][9] = 'K'
+        return _S(g)
+    def bird(k):
+        g = _blank(16, 16)
+        up = (3, 1, -1, 1)[k]
+        for i in range(6):
+            yy = 8 - (up * (5 - i)) // 5
+            g[yy][7 - i] = 'B'; g[yy][8 + i] = 'B'
+            if i < 4: g[yy + 1][7 - i] = 'b'; g[yy + 1][8 + i] = 'b'
+        g[8][7] = 'B'; g[8][8] = 'B'; g[9][7] = 'B'; g[9][8] = 'B'
+        return _S(g)
+    return [[f(k) for k in range(4)] for f in (leaf, ember, ash, bubble, butterfly, bird)]
+
+# barra de recarga de la red (16x8): 8 pasos, en rojo mientras se llena
+def reload_frames():
+    out = []
+    for k in range(8):
+        g = _blank(16, 8)
+        for x in range(1, 15):
+            g[2][x] = 'K'; g[5][x] = 'K'
+        g[3][1] = g[4][1] = 'K'; g[3][14] = g[4][14] = 'K'
+        n = 1 + (k * 12) // 7
+        for x in range(2, 14):
+            c = ('r' if x - 2 < n else 'c')
+            g[3][x] = c if c != 'r' else 'R'; g[4][x] = c
+        out.append(_S(g))
+    return [out]

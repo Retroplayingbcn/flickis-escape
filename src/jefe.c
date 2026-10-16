@@ -5,7 +5,7 @@
 // cansado un segundo, que es el momento de darle. A mitad de vida se enfada (se pone rojo y acelera).
 #include "juego.h"
 
-enum { J_CAE, J_ENTRA, J_PERSIGUE, J_PREPARA, J_EMBISTE, J_RECUPERA, J_OCULTO, J_RABIA, J_RETROCEDE, J_DERROTA };
+enum { J_CAE, J_ENTRA, J_PERSIGUE, J_PREPARA, J_EMBISTE, J_RECUPERA, J_OCULTO, J_RABIA, J_RETROCEDE, J_PAUSA, J_DERROTA };
 
 typedef struct {
     Sprite* s;
@@ -309,7 +309,7 @@ void jefe_actualizar() {
                     jefe.estado = J_RECUPERA;
                 } else {
                     disparar_abanico(DISPARO_RED, 34, rabia ? 3 : 1); sonido(SFX_LANZAR);
-                    jefe.estado = J_RECUPERA;
+                    jefe.estado = J_PAUSA;                // el cazador no se cansa: un gesto breve y vuelve a la carga
                 }
             }
             break;
@@ -330,6 +330,11 @@ void jefe_actualizar() {
             if (jefe.t > dura) { aviso_quitar(); jefe.estado = J_PERSIGUE; jefe.t = 0; }
             break;
         }
+
+        case J_PAUSA:
+            jefe.vx = 0; jefe.vy = 0;
+            if (jefe.t > 24) { jefe.estado = J_PERSIGUE; jefe.t = 0; }
+            break;
 
         case J_RETROCEDE:                                 // empujado por el huevazo
             mover(jefe.vx, jefe.vy);
