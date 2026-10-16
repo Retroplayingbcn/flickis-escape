@@ -21,3 +21,16 @@ IMAGE bg_como_jugar "gfx/bg_como_jugar.png"
 IMAGE bg_cazador_ganador "gfx/bg_cazador_ganador.png"
 IMAGE bg_pajaro_ganador "gfx/bg_pajaro_ganador.png"
 IMAGE bg_versus "gfx/bg_versus.png"
+
+// ---- Rediseño 16 bits (generado por tools/art/gen_assets.py) ----
+PALETTE pal_bosque_maze "gen/bosque_maze.png"
+TILESET ts_bosque_maze "gen/bosque_maze.png" NONE NONE
+PALETTE pal_bosque_floor "gen/bosque_floor.png"
+TILESET ts_bosque_floor "gen/bosque_floor.png" NONE NONE
+PALETTE pal_items "gen/items.png"
+TILESET ts_items "gen/items.png" NONE NONE
+TILESET ts_hud "gen/hud.png" NONE NONE
+TILESET ts_font "gen/font.png" NONE NONE
+SPRITE hero_sprite "gen/hero.png" 2 2 FAST 0
+SPRITE chick_sprite "gen/chick.png" 2 2 FAST 0
+SPRITE hunter_sprite "gen/hunter.png" 3 3 FAST 0

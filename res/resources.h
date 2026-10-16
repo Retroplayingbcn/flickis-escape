@@ -26,5 +26,16 @@ extern const Image bg_como_jugar;
 extern const Image bg_cazador_ganador;
 extern const Image bg_pajaro_ganador;
 extern const Image bg_versus;
+extern const Palette pal_bosque_maze;
+extern const TileSet ts_bosque_maze;
+extern const Palette pal_bosque_floor;
+extern const TileSet ts_bosque_floor;
+extern const Palette pal_items;
+extern const TileSet ts_items;
+extern const TileSet ts_hud;
+extern const TileSet ts_font;
+extern const SpriteDefinition hero_sprite;
+extern const SpriteDefinition chick_sprite;
+extern const SpriteDefinition hunter_sprite;
 
 #endif // _RES_RESOURCES_H_

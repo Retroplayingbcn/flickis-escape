@@ -1,8 +1,15 @@
 #include <genesis.h>
 #include "resources.h"
+#include "hud_chars.h"
 
-#define MAP_WIDTH   40
-#define MAP_HEIGHT  27  
+#define MAP_WIDTH   20
+#define MAP_HEIGHT  13
+// --- REJILLA DE 16x16 (rediseño 16 bits) ---
+#define CELDA        16
+#define CELDA_SHIFT  4
+#define CELDA_MASK   15
+#define PLAY_Y       16   // el marcador ocupa los 16 px superiores
+#define PLAY_TY      2    // fila de tiles donde empieza el laberinto
 
 // --- TILES DEL MAPA ---
 #define TILE_SUELO     0
@@ -15,8 +22,9 @@
 #define TILE_GFX_SUELO_B  7
 #define TILE_GFX_FLECHA    8
 
-#define FLICKY_DRAW_OFFSET   4
-#define CAZADOR_DRAW_OFFSET  8
+#define FLICKY_DRAW_OFFSET   0
+#define CAZADOR_DRAW_OFFSET  4
+#define CAZADOR_DRAW_OFFSET_Y 8
 
 #define ANIM_ABAJO  0
 #define ANIM_ARRIBA 1
@@ -40,12 +48,14 @@
 #define MUNDO_MARINO  2
 #define MUNDO_CELESTE 3  
 
-#define MAX_HISTORIAL  128
+#define MAX_HISTORIAL  256
+#define HIST_MASK      255
+#define SEPARACION_POLLUELOS 12
 #define DURACION_PODER_FRAMES  300 
 
 // --- DURACIONES DE ESTADO TRAS DISPERSIÓN/RABIA ---
-#define TIEMPO_INVULNERABILIDAD_FRAMES 150  // ~2.5 segundos a 60fps[cite: 1]
-#define RADIO_DISPERSION 6  // Radio en tiles para dispersar polluelos[cite: 1]
+#define TIEMPO_INVULNERABILIDAD_FRAMES 150  // ~2.5 segundos a 60fps
+#define RADIO_DISPERSION 3  // Radio en celdas para dispersar polluelos
 
 // ===== SISTEMA DE MÚSICA DE FONDO =====
 #define N_SIL   0
@@ -254,9 +264,9 @@ s16 timer_duracion_furia = 0;
 bool flicky_invulnerable = FALSE;
 s16 timer_invulnerabilidad = 0;
 
-#define NIDO_X 17
-#define NIDO_Y 12  
-#define NIDO_ANCHO 10
+#define NIDO_X 9
+#define NIDO_Y 6
+#define NIDO_ANCHO 2
 
 s16 posiciones_polluelos_x[15];
 s16 posiciones_polluelos_y[15];
@@ -302,10 +312,12 @@ void efecto_shake_actualizar() {
     if (shake_timer > 0) {
         shake_x = (random() % (shake_intensidad * 2 + 1)) - shake_intensidad;
         VDP_setHorizontalScroll(BG_A, shake_x);
+        VDP_setHorizontalScroll(BG_B, shake_x);
         shake_timer--;
     } else if (shake_x != 0) {
         shake_x = 0;
         VDP_setHorizontalScroll(BG_A, 0);
+        VDP_setHorizontalScroll(BG_B, 0);
     }
 }
 
@@ -543,6 +555,13 @@ void procesar_silencio_psg() {
 
 // ===== DECLARACIONES DE FUNCIONES =====
 bool en_zona_nido(s16 tx, s16 ty);
+void dibujar_celda(s16 cx, s16 cy);
+void dibujar_mapa_completo();
+void cargar_graficos_mundo();
+void muros_alerta(bool activa);
+void hud_forzar_redibujo();
+void hud_mensaje(const char* txt);
+void hud_actualizar();
 void mostrar_pantalla_titulo();
 void mostrar_menu_opciones();
 void mostrar_pantalla_como_jugar();
@@ -568,6 +587,173 @@ void mostrar_enhorabuena();
 void verificar_fin_ronda_versus(bool gano_pajaro);
 
 // ===== NUEVAS FUNCIONES: INMUNIDAD Y DISPERSIÓN =====
+
+// =====================================================================
+// RENDERIZADO DEL LABERINTO, MARCADOR Y PALETAS (rediseño 16 bits)
+// Cada celda lógica de 16x16 = 4 tiles VDP consecutivos en el tileset.
+// =====================================================================
+static u16 base_maze, base_floor, base_items, base_hud;
+static const Palette* pal_maze_actual = &pal_bosque_maze;
+
+#define META_NIDO     16   // metatiles 16-17 del tileset del laberinto
+#define TILE_HUD_FONDO 72  // tile suelto: relleno del marcador
+#define TILE_HUD_BORDE 73  // tile suelto: borde inferior del marcador
+
+static void poner_meta(VDPPlane plano, u16 pal, u16 tile_base, s16 cx, s16 cy) {
+    u16 x = cx << 1, y = (cy << 1) + PLAY_TY;
+    VDP_setTileMapXY(plano, TILE_ATTR_FULL(pal, 0, 0, 0, tile_base),     x,     y);
+    VDP_setTileMapXY(plano, TILE_ATTR_FULL(pal, 0, 0, 0, tile_base + 1), x + 1, y);
+    VDP_setTileMapXY(plano, TILE_ATTR_FULL(pal, 0, 0, 0, tile_base + 2), x,     y + 1);
+    VDP_setTileMapXY(plano, TILE_ATTR_FULL(pal, 0, 0, 0, tile_base + 3), x + 1, y + 1);
+}
+
+static bool hay_muro(s16 x, s16 y) {
+    if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) return TRUE;   // fuera = muro (borde continuo)
+    return mapa[y][x] == TILE_MURO;
+}
+
+static bool es_celda_nido(s16 x, s16 y) {
+    return (y == NIDO_Y && x >= NIDO_X && x < NIDO_X + NIDO_ANCHO);
+}
+
+void dibujar_celda(s16 cx, s16 cy) {
+    if (cx < 0 || cy < 0 || cx >= MAP_WIDTH || cy >= MAP_HEIGHT) return;
+    u8 t = mapa[cy][cx];
+    // Plano A: muros (autotile por vecinos), nido u objetos
+    if (t == TILE_MURO) {
+        u16 mask = (hay_muro(cx, cy - 1) ? 1 : 0) | (hay_muro(cx + 1, cy) ? 2 : 0) |
+                   (hay_muro(cx, cy + 1) ? 4 : 0) | (hay_muro(cx - 1, cy) ? 8 : 0);
+        poner_meta(BG_A, PAL0, base_maze + mask * 4, cx, cy);
+    } else if (es_celda_nido(cx, cy)) {
+        poner_meta(BG_A, PAL0, base_maze + (META_NIDO + cx - NIDO_X) * 4, cx, cy);
+    } else if (t == TILE_POLLUELO || t == TILE_RELOJ || t == TILE_RAYO || t == TILE_GEMA) {
+        u16 item = (t == TILE_POLLUELO) ? 0 : (t == TILE_RELOJ) ? 1 : (t == TILE_RAYO) ? 2 : 3;
+        poner_meta(BG_A, PAL2, base_items + item * 4, cx, cy);
+    } else {
+        poner_meta(BG_A, PAL0, 0, cx, cy);   // tile 0 = transparente
+        VDP_setTileMapXY(BG_A, 0, cx << 1, (cy << 1) + PLAY_TY);
+        VDP_setTileMapXY(BG_A, 0, (cx << 1) + 1, (cy << 1) + PLAY_TY);
+        VDP_setTileMapXY(BG_A, 0, cx << 1, (cy << 1) + PLAY_TY + 1);
+        VDP_setTileMapXY(BG_A, 0, (cx << 1) + 1, (cy << 1) + PLAY_TY + 1);
+    }
+    // Plano B: suelo con sombra proyectada por los muros de arriba/izquierda
+    u16 sombra = (hay_muro(cx, cy - 1) ? 1 : 0) | (hay_muro(cx - 1, cy) ? 2 : 0) | (hay_muro(cx - 1, cy - 1) ? 4 : 0);
+    u16 textura = ((cx * 7) + (cy * 13)) & 3;
+    poner_meta(BG_B, PAL1, base_floor + (textura * 8 + sombra) * 4, cx, cy);
+}
+
+void dibujar_mapa_completo() {
+    for (s16 y = 0; y < MAP_HEIGHT; y++)
+        for (s16 x = 0; x < MAP_WIDTH; x++) dibujar_celda(x, y);
+}
+
+void cargar_graficos_mundo() {
+    // De momento todos los mundos usan el tileset del bosque (fase 1 del rediseño)
+    pal_maze_actual = &pal_bosque_maze;
+    base_maze  = TILE_USER_INDEX;
+    base_floor = base_maze + ts_bosque_maze.numTile;
+    base_items = base_floor + ts_bosque_floor.numTile;
+    base_hud   = base_items + ts_items.numTile;
+    VDP_loadTileSet(&ts_bosque_maze, base_maze, DMA);
+    VDP_loadTileSet(&ts_bosque_floor, base_floor, DMA);
+    VDP_loadTileSet(&ts_items, base_items, DMA);
+    VDP_loadTileSet(&ts_hud, base_hud, DMA);
+    PAL_setPalette(PAL0, pal_bosque_maze.data, CPU);
+    PAL_setPalette(PAL1, pal_bosque_floor.data, CPU);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    color_muro_original = pal_bosque_maze.data[1];
+    VDP_setTextPalette(PAL0);
+}
+
+// Muros en alerta (rabia / cierre): tiñe los 5 tonos del muro de rojo
+void muros_alerta(bool activa) {
+    static const u16 rojos[5] = { RGB24_TO_VDPCOLOR(0xD83020), RGB24_TO_VDPCOLOR(0x902018), RGB24_TO_VDPCOLOR(0xF06040),
+                                  RGB24_TO_VDPCOLOR(0xFFA080), RGB24_TO_VDPCOLOR(0x601010) };
+    for (u16 i = 0; i < 5; i++) PAL_setColor(1 + i, activa ? rojos[i] : pal_maze_actual->data[1 + i]);
+}
+
+// ---------------- MARCADOR (fuente 8x16 con fondo integrado, en el plano B) ----------------
+static u32 hud_cache_puntos = 0xFFFFFFFF;
+static u16 hud_cache_tiempo = 0xFFFF, hud_cache_huevos = 0xFFFF, hud_cache_vidas = 0xFFFF;
+static u8  hud_cache_parpadeo = 0xFF;
+
+static void hud_texto(const char* txt, u16 col) {
+    for (u16 i = 0; txt[i] && col + i < 40; i++) {
+        const char* p = HUD_CHARS; u16 idx = 0;
+        char c = txt[i];
+        if (c >= 'a' && c <= 'z') c -= 32;
+        for (u16 k = 0; p[k]; k++) if (p[k] == c) { idx = k; break; }
+        VDP_setTileMapXY(BG_B, TILE_ATTR_FULL(PAL0, 0, 0, 0, base_hud + idx * 2), col + i, 0);
+        VDP_setTileMapXY(BG_B, TILE_ATTR_FULL(PAL0, 0, 0, 0, base_hud + idx * 2 + 1), col + i, 1);
+    }
+}
+
+static void hud_icono(u16 item, u16 col) {
+    u16 t = base_items + item * 4;
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 0, 0, 0, t),     col,     0);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 0, 0, 0, t + 1), col + 1, 0);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 0, 0, 0, t + 2), col,     1);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 0, 0, 0, t + 3), col + 1, 1);
+}
+
+void hud_forzar_redibujo() {
+    hud_cache_puntos = 0xFFFFFFFF; hud_cache_tiempo = 0xFFFF; hud_cache_huevos = 0xFFFF;
+    hud_cache_vidas = 0xFFFF; hud_cache_parpadeo = 0xFF;
+    hud_texto("                                        ", 0);
+    for (u16 x = 0; x < 40; x++) { VDP_setTileMapXY(BG_A, 0, x, 0); VDP_setTileMapXY(BG_A, 0, x, 1); }
+}
+
+void hud_mensaje(const char* txt) {
+    hud_texto("                                        ", 0);
+    for (u16 x = 0; x < 40; x++) { VDP_setTileMapXY(BG_A, 0, x, 0); VDP_setTileMapXY(BG_A, 0, x, 1); }
+    u16 len = strlen(txt);
+    hud_texto(txt, (40 - len) / 2);
+}
+
+void hud_actualizar() {
+    char buf[16];
+    u16 min = tiempo_restante_segundos / 60;
+    u16 seg = tiempo_restante_segundos - (min * 60);
+    bool redibujo_total = (hud_cache_tiempo == 0xFFFF);
+
+    if (modo_jugadores == 1) {
+        if (redibujo_total) { hud_texto("P1", 1); hud_texto("P2", 9); hud_texto("TIME", 26); }
+        if (hud_cache_puntos != (u32)(victorias_pajaro * 100 + victorias_cazador)) {
+            hud_cache_puntos = victorias_pajaro * 100 + victorias_cazador;
+            sprintf(buf, "%d", (u16)victorias_pajaro);  hud_texto(buf, 4);
+            sprintf(buf, "%d", (u16)victorias_cazador); hud_texto(buf, 12);
+        }
+    } else {
+        if (redibujo_total) {
+            if (modo_juego_seleccionada == 0) { sprintf(buf, "%d-%d", mundo_actual + 1, fase_actual); hud_texto(buf, 1); }
+            else hud_texto("LIBRE", 1);
+            hud_texto("SCORE", 7); hud_texto("TIME", 20);
+            hud_icono(0, 29);   // polluelo
+            hud_icono(4, 36);   // cabeza del protagonista
+        }
+        if (hud_cache_puntos != flicky.puntuacion) {
+            hud_cache_puntos = flicky.puntuacion;
+            sprintf(buf, "%06ld", flicky.puntuacion); hud_texto(buf, 13);
+        }
+        u8 parpadeo = salida_abierta ? ((frame_counter >> 4) & 1) : 0;
+        u16 huevos = total_salvados * 100 + max_polluelos_nivel;
+        if (hud_cache_huevos != huevos || hud_cache_parpadeo != parpadeo) {
+            hud_cache_huevos = huevos; hud_cache_parpadeo = parpadeo;
+            if (salida_abierta && parpadeo) hud_texto("META!", 31);
+            else { sprintf(buf, "%02d/%02d", total_salvados, max_polluelos_nivel); hud_texto(buf, 31); }
+        }
+        if (hud_cache_vidas != (u16)continues_restantes) {
+            hud_cache_vidas = continues_restantes;
+            sprintf(buf, "x%d", continues_restantes); hud_texto(buf, 38);
+        }
+    }
+    if (hud_cache_tiempo != tiempo_restante_segundos) {
+        hud_cache_tiempo = tiempo_restante_segundos;
+        sprintf(buf, "%d:%02d", min, seg);
+        hud_texto(buf, (modo_jugadores == 1) ? 31 : 25);
+    }
+}
+
 void dispersar_polluelos() {
     for (u16 i = 0; i < semillas_en_fila; i++) {
         if (sprites_seguidores[i]) {
@@ -576,8 +762,8 @@ void dispersar_polluelos() {
         }
     }
     
-    u16 cx = flicky.x >> 3;
-    u16 cy = flicky.y >> 3;
+    u16 cx = (flicky.x + 8) >> CELDA_SHIFT;
+    u16 cy = (flicky.y + 8) >> CELDA_SHIFT;
     u16 dispersados = 0;
     u16 intentos = 0;
     
@@ -589,7 +775,7 @@ void dispersar_polluelos() {
         if (rx >= 1 && rx < MAP_WIDTH - 1 && ry >= 1 && ry < MAP_HEIGHT - 1) {
             if (mapa[ry][rx] == TILE_SUELO && !en_zona_nido(rx, ry)) {
                 mapa[ry][rx] = TILE_POLLUELO;
-                VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + TILE_POLLUELO), rx, ry);
+                dibujar_celda(rx, ry);
                 dispersados++;
             }
         }
@@ -629,12 +815,13 @@ int main(bool hard) {
 
     JOY_init();
 
-    PAL_setPalette(PAL0, bkg_pal.data, CPU);                  
-    PAL_setPalette(PAL1, bg_forest.palette->data, CPU);       
-    PAL_setPalette(PAL2, flicky_sprite.palette->data, CPU);   
-    PAL_setPalette(PAL3, cazador_sprite.palette->data, CPU);   
+    VDP_loadFont(&ts_font, DMA);
+    PAL_setPalette(PAL0, pal_bosque_maze.data, CPU);
+    PAL_setPalette(PAL1, pal_bosque_floor.data, CPU);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
 
-    color_muro_original = bkg_pal.data[1];
+    color_muro_original = pal_bosque_maze.data[1];
 
     estado_actual = ESTADO_TITULO;
     mostrar_pantalla_titulo();
@@ -722,7 +909,7 @@ int main(bool hard) {
                         mostrar_menu_opciones();
                         boton_pulsado = TRUE;
                         waitMs(200);
-                        return 0;
+                        continue;
                     }
                     playMenuClickSound();
                     mostrar_menu_versus();
@@ -743,7 +930,7 @@ int main(bool hard) {
                         mostrar_menu_opciones();
                         boton_pulsado = TRUE;
                         waitMs(200);
-                        return 0;
+                        continue;
                     }
                     playMenuClickSound();
                     mostrar_menu_versus();
@@ -824,10 +1011,10 @@ int main(bool hard) {
                 playMenuClickSound();
                 juego_pausado = !juego_pausado;
                 if (juego_pausado) {
-                    VDP_drawText("PAUSA", 18, 13);
+                    hud_mensaje("PAUSA");
                     musica_pausar();
                 } else {
-                    VDP_drawText("      ", 18, 13); 
+                    hud_forzar_redibujo();
                     musica_reanudar();
                 }
                 waitMs(250); 
@@ -989,14 +1176,11 @@ void mostrar_intro_mundo_actual() {
 }
 
 void inicializar_juego() {
-    VDP_loadTileSet(&bkg_tileset, TILE_USER_INDEX, CPU);
     VDP_clearPlane(BG_A, TRUE);
     VDP_clearPlane(BG_B, TRUE);
-    
-    PAL_setPalette(PAL0, bkg_pal.data, CPU);
-    PAL_setPalette(PAL2, flicky_sprite.palette->data, CPU);
+    cargar_graficos_mundo();
 
-    const SpriteDefinition* cazador_recurso = &cazador_sprite;
+    const SpriteDefinition* cazador_recurso = &hunter_sprite;
     if (mundo_actual == MUNDO_VOLCAN) {
         cazador_recurso = &sprites_llama;
     } else if (mundo_actual == MUNDO_MARINO) {
@@ -1031,56 +1215,28 @@ void inicializar_juego() {
     }
 
     generar_mapa_aleatorio();
-
-    if (mundo_actual == MUNDO_BOSQUE) {
-        PAL_setPalette(PAL1, bg_forest.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_forest, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX + bkg_tileset.numTile), 0, 0, FALSE, DMA);
-    } else if (mundo_actual == MUNDO_VOLCAN) {
-        PAL_setPalette(PAL1, bg_volcan.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_volcan, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX + bkg_tileset.numTile), 0, 0, FALSE, DMA);
-    } else if (mundo_actual == MUNDO_MARINO) {
-        PAL_setPalette(PAL1, bg_marino.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_marino, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX + bkg_tileset.numTile), 0, 0, FALSE, DMA);
-    } else {
-        PAL_setPalette(PAL1, bg_celeste.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_celeste, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX + bkg_tileset.numTile), 0, 0, FALSE, DMA);
-    }
-
-    for(u16 y = 0; y < MAP_HEIGHT; y++) {
-        for(u16 x = 0; x < MAP_WIDTH; x++) {
-            if (mapa[y][x] != TILE_SUELO && mapa[y][x] != TILE_MURO) mapa[y][x] = TILE_SUELO;
-            if(mapa[y][x] == TILE_MURO) {
-                VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + TILE_MURO), x, y);
-            }
-        }
-    }
-
-    for(u16 x = 0; x < MAP_WIDTH; x++) {
-        VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), x, 27);
-        VDP_setTileMapXY(BG_B, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), x, 27);
-    }
-
     calcular_alcanzables();
-
-    for (u16 i = 0; i < NIDO_ANCHO; i++) {
-        VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + TILE_NIDO), NIDO_X + i, NIDO_Y);
-    }
-
     repartir_polluelos_seguros();
+    VDP_setEnable(FALSE);          // dibujar con la pantalla apagada: el nivel aparece de golpe
+    dibujar_mapa_completo();
+    hud_forzar_redibujo();
+    VDP_setEnable(TRUE);
 
-    flicky.x = 16; flicky.y = 8; flicky.x_vel = 0; flicky.y_vel = 0;
-    flicky.sprite = SPR_addSprite(&flicky_sprite, flicky.x - FLICKY_DRAW_OFFSET, flicky.y - FLICKY_DRAW_OFFSET, TILE_ATTR(PAL2, 0, FALSE, FALSE));
+    flicky.x = 1 * CELDA; flicky.y = 1 * CELDA; flicky.x_vel = 0; flicky.y_vel = 0;
+    flicky.sprite = SPR_addSprite(&hero_sprite, flicky.x - FLICKY_DRAW_OFFSET, flicky.y + PLAY_Y - FLICKY_DRAW_OFFSET, TILE_ATTR(PAL2, 0, FALSE, FALSE));
     
     for (u16 h = 0; h < MAX_HISTORIAL; h++) {
         historial_x[h] = flicky.x;
         historial_y[h] = flicky.y;
     }
 
-    s16 caz_tx = 19, caz_ty = 10;
-    buscar_celda_libre(&caz_tx, &caz_ty);
-    cazador.x = caz_tx * 8; cazador.y = caz_ty * 8; cazador.x_vel = 0; cazador.y_vel = 0;
+    s16 caz_tx = MAP_WIDTH - 2, caz_ty = MAP_HEIGHT - 2;
+    for (u16 intento = 0; intento < 20; intento++) {
+        if (buscar_celda_libre(&caz_tx, &caz_ty) && (abs(caz_tx - 1) + abs(caz_ty - 1)) >= 10) break;
+    }
+    cazador.x = caz_tx * CELDA; cazador.y = caz_ty * CELDA; cazador.x_vel = 0; cazador.y_vel = 0;
     
-    cazador.sprite = SPR_addSprite(cazador_recurso, cazador.x - CAZADOR_DRAW_OFFSET, cazador.y - CAZADOR_DRAW_OFFSET, TILE_ATTR(PAL3, 0, FALSE, FALSE));
+    cazador.sprite = SPR_addSprite(cazador_recurso, cazador.x - CAZADOR_DRAW_OFFSET, cazador.y + PLAY_Y - CAZADOR_DRAW_OFFSET_Y, TILE_ATTR(PAL3, 0, FALSE, FALSE));
 
     musica_segun_estado(ESTADO_JUEGO);
 }
@@ -1088,7 +1244,7 @@ void inicializar_juego() {
 void lauch_partida() {} 
 
 void finalizar_partida() {
-    PAL_setColor(1, color_muro_original); 
+    muros_alerta(FALSE); 
     if (flicky.sprite)  { SPR_releaseSprite(flicky.sprite);  flicky.sprite = NULL; }
     if (cazador.sprite) { SPR_releaseSprite(cazador.sprite); cazador.sprite = NULL; }
     
@@ -1111,6 +1267,7 @@ void finalizar_partida() {
     shake_x = 0;
     shake_timer = 0;
     VDP_setHorizontalScroll(BG_A, 0);
+    VDP_setHorizontalScroll(BG_B, 0);
     
     SPR_clear();
     SPR_update();
@@ -1128,7 +1285,7 @@ void mostrar_pantalla_continue() {
     VDP_clearPlane(BG_A, TRUE);
     VDP_clearPlane(BG_B, TRUE);
     
-    PAL_setColor(1, color_muro_original);
+    muros_alerta(FALSE);
     
     VDP_setTextPalette(PAL0); 
     char buf[40];
@@ -1206,21 +1363,77 @@ void verificar_fin_ronda_versus(bool gano_pajaro) {
 }
 
 bool en_zona_nido(s16 tx, s16 ty) {
-    return (ty >= NIDO_Y - 1 && ty <= NIDO_Y + 1 && tx >= NIDO_X - 1 && tx <= NIDO_X + NIDO_ANCHO);
+    return (ty >= NIDO_Y - 1 && ty <= NIDO_Y + 1 && tx >= NIDO_X - 1 && tx <= NIDO_X + NIDO_ANCHO);   // plaza central
 }
 
+// Laberinto trenzado y simétrico en rejilla de 20x13 celdas de 16x16.
+// 1) backtracker recursivo en la mitad izquierda (celdas impares), 2) se eliminan
+// la mayoría de callejones sin salida para crear bucles de escape, 3) columna central
+// y plaza del nido abiertas, 4) espejo horizontal. Siempre queda todo conectado.
 void generar_mapa_aleatorio() {
+    static s16 pila_x[64], pila_y[64];
+    static bool visitada[MAP_HEIGHT][10];
+    const s16 ddx[4] = {2, -2, 0, 0};
+    const s16 ddy[4] = {0, 0, 2, -2};
+    setRandomSeed(random() ^ (u16)vtimer);   // cada nivel distinto (depende del tiempo en menús)
+
     for (u16 y = 0; y < MAP_HEIGHT; y++) {
-        for (u16 x = 0; x < MAP_WIDTH; x++) {
-            if (x == 0 || x == MAP_WIDTH - 1 || y == 0 || y == MAP_HEIGHT - 1) {
-                mapa[y][x] = TILE_MURO;
-            } else if (en_zona_nido(x, y) || (x <= 4 && y <= 3)) {
-                mapa[y][x] = TILE_SUELO;
-            } else {
-                mapa[y][x] = ((random() % 100) < 22) ? TILE_MURO : TILE_SUELO;
+        for (u16 x = 0; x < MAP_WIDTH; x++) mapa[y][x] = TILE_MURO;
+        for (u16 x = 0; x < 10; x++) visitada[y][x] = FALSE;
+    }
+
+    u16 sp = 0;
+    pila_x[sp] = 1; pila_y[sp] = 1; sp++;
+    visitada[1][1] = TRUE; mapa[1][1] = TILE_SUELO;
+    while (sp > 0) {
+        s16 x = pila_x[sp - 1], y = pila_y[sp - 1];
+        u16 opciones[4]; u16 n = 0;
+        for (u16 d = 0; d < 4; d++) {
+            s16 nx = x + ddx[d], ny = y + ddy[d];
+            if (nx >= 1 && nx <= 7 && ny >= 1 && ny <= MAP_HEIGHT - 2 && !visitada[ny][nx]) opciones[n++] = d;
+        }
+        if (n == 0) { sp--; continue; }
+        u16 d = opciones[random() % n];
+        s16 nx = x + ddx[d], ny = y + ddy[d];
+        mapa[y + ddy[d] / 2][x + ddx[d] / 2] = TILE_SUELO;
+        mapa[ny][nx] = TILE_SUELO;
+        visitada[ny][nx] = TRUE;
+        pila_x[sp] = nx; pila_y[sp] = ny; sp++;
+    }
+
+    // Trenzado: quitar callejones sin salida (70%)
+    for (s16 y = 1; y <= MAP_HEIGHT - 2; y += 2) {
+        for (s16 x = 1; x <= 7; x += 2) {
+            u16 salidas = 0;
+            if (mapa[y][x + 1] == TILE_SUELO) salidas++;
+            if (mapa[y][x - 1] == TILE_SUELO) salidas++;
+            if (mapa[y + 1][x] == TILE_SUELO) salidas++;
+            if (mapa[y - 1][x] == TILE_SUELO) salidas++;
+            if (salidas == 1 && (random() % 100) < 70) {
+                u16 opciones[4]; u16 n = 0;
+                for (u16 d = 0; d < 4; d++) {
+                    s16 mx = x + ddx[d] / 2, my = y + ddy[d] / 2;
+                    s16 tx = x + ddx[d], ty = y + ddy[d];
+                    if (mapa[my][mx] == TILE_MURO && tx > 0 && tx < MAP_WIDTH - 1 && ty > 0 && ty < MAP_HEIGHT - 1) opciones[n++] = d;
+                }
+                if (n > 0) { u16 d = opciones[random() % n]; mapa[y + ddy[d] / 2][x + ddx[d] / 2] = TILE_SUELO; }
             }
         }
     }
+
+    // Columna central (9) abierta con algún tope, conexiones desde la columna 8
+    for (s16 y = 1; y <= MAP_HEIGHT - 2; y++) {
+        mapa[y][9] = ((y % 4) == 2 && (random() & 1)) ? TILE_MURO : TILE_SUELO;
+        if (y & 1) mapa[y][8] = TILE_SUELO;
+    }
+    // Plaza del nido
+    for (s16 y = NIDO_Y - 1; y <= NIDO_Y + 1; y++) { mapa[y][8] = TILE_SUELO; mapa[y][9] = TILE_SUELO; }
+
+    // Espejo horizontal y borde
+    for (s16 y = 0; y < MAP_HEIGHT; y++)
+        for (s16 x = 0; x < 10; x++) mapa[y][MAP_WIDTH - 1 - x] = mapa[y][x];
+    for (s16 x = 0; x < MAP_WIDTH; x++) { mapa[0][x] = TILE_MURO; mapa[MAP_HEIGHT - 1][x] = TILE_MURO; }
+    for (s16 y = 0; y < MAP_HEIGHT; y++) { mapa[y][0] = TILE_MURO; mapa[y][MAP_WIDTH - 1] = TILE_MURO; }
 }
 
 void calcular_alcanzables() {
@@ -1229,7 +1442,7 @@ void calcular_alcanzables() {
             alcanzable[y][x] = FALSE;
 
     u16 inicio = 0, fin = 0;
-    s16 sx = 2, sy = 1; 
+    s16 sx = 1, sy = 1; 
 
     cola_bfs_x[fin] = sx; cola_bfs_y[fin] = sy; fin++;
     alcanzable[sy][sx] = TRUE;
@@ -1256,15 +1469,14 @@ void repartir_polluelos_seguros() {
     while (repartidos < max_polluelos_nivel && intentos < 500) {
         intentos++;
         u16 rx = (random() % (MAP_WIDTH - 2)) + 1;
-        u16 ry = (random() % (MAP_HEIGHT - 4)) + 1;
+        u16 ry = (random() % (MAP_HEIGHT - 2)) + 1;
         if (mapa[ry][rx] == TILE_SUELO && !en_zona_nido(rx, ry) && alcanzable[ry][rx]) {
             bool cerca = FALSE;
-            for (u16 i = 0; i < repartidos; i++) if (abs(posiciones_polluelos_x[i] - (s16)rx) < 3 && abs(posiciones_polluelos_y[i] - (s16)ry) < 3) cerca = TRUE;
+            for (u16 i = 0; i < repartidos; i++) if (abs(posiciones_polluelos_x[i] - (s16)rx) < 2 && abs(posiciones_polluelos_y[i] - (s16)ry) < 2) cerca = TRUE;
             if (!cerca) {
                 mapa[ry][rx] = TILE_POLLUELO;
                 posiciones_polluelos_x[repartidos] = rx;
                 posiciones_polluelos_y[repartidos] = ry;
-                VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + TILE_POLLUELO), rx, ry);
                 repartidos++;
             }
         }
@@ -1274,8 +1486,8 @@ void repartir_polluelos_seguros() {
 bool buscar_celda_libre(s16* out_x, s16* out_y) {
     for (u16 intentos = 0; intentos < 200; intentos++) {
         u16 rx = (random() % (MAP_WIDTH - 2)) + 1;
-        u16 ry = (random() % (MAP_HEIGHT - 4)) + 1;
-        if (mapa[ry][rx] == TILE_SUELO && !en_zona_nido(rx, ry) && alcanzable[ry][rx]) {
+        u16 ry = (random() % (MAP_HEIGHT - 2)) + 1;
+        if (mapa[ry][rx] == TILE_SUELO && !en_zona_nido(rx, ry) && alcanzable[ry][rx] && !(rx == (u16)((flicky.x + 8) >> CELDA_SHIFT) && ry == (u16)((flicky.y + 8) >> CELDA_SHIFT))) {
             *out_x = rx; *out_y = ry;
             return TRUE;
         }
@@ -1305,13 +1517,13 @@ void generar_powerup_aleatorio() {
     }
 
     mapa[ry][rx] = tipo;
-    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + tipo), rx, ry);
+    dibujar_celda(rx, ry);
 }
 
 void aplicar_recorte_battle_royale() {
-    anillo_recorte += 3;
+    anillo_recorte += 1;
     en_preaviso_cierre = FALSE;
-    PAL_setColor(1, color_muro_original); 
+    muros_alerta(FALSE); 
     
     for (u16 y = 0; y < MAP_HEIGHT; y++) {
         for (u16 x = 0; x < MAP_WIDTH; x++) {
@@ -1326,32 +1538,32 @@ void aplicar_recorte_battle_royale() {
                     return;
                 }
                 mapa[y][x] = TILE_MURO;
-                VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + TILE_MURO), x, y);
             }
         }
     }
+    dibujar_mapa_completo();
     reproducir_sonido_item(180);
 }
 
 void leer_entrada() {
     u16 value1 = JOY_readJoypad(JOY_1);
     
-    s16 flicky_offset_x = flicky.x & 7; 
-    s16 flicky_offset_y = flicky.y & 7; 
+    s16 flicky_offset_x = flicky.x & CELDA_MASK; 
+    s16 flicky_offset_y = flicky.y & CELDA_MASK; 
 
-    if ((flicky_offset_x <= 3) && (flicky_offset_y <= 3)) {
+    if ((flicky_offset_x <= 3 || flicky_offset_x >= 13) && (flicky_offset_y <= 3 || flicky_offset_y >= 13)) {
         s16 nx = 0, ny = 0;
         if (value1 & BUTTON_LEFT) nx = -1; 
         else if (value1 & BUTTON_RIGHT) nx = 1;
         else if (value1 & BUTTON_UP) ny = -1; 
         else if (value1 & BUTTON_DOWN) ny = 1;
         
-        if (nx != 0 || ny != 0) {
-            s16 tx = (flicky.x >> 3) + nx; 
-            s16 ty = (flicky.y >> 3) + ny; 
+        if ((nx != 0 || ny != 0) && (nx != flicky.x_vel || ny != flicky.y_vel)) {
+            s16 tx = ((flicky.x + 8) >> CELDA_SHIFT) + nx; 
+            s16 ty = ((flicky.y + 8) >> CELDA_SHIFT) + ny; 
             if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT && mapa[ty][tx] != TILE_MURO) {
-                flicky.x = (flicky.x >> 3) << 3; 
-                flicky.y = (flicky.y >> 3) << 3;
+                flicky.x = ((flicky.x + 8) >> CELDA_SHIFT) << CELDA_SHIFT; 
+                flicky.y = ((flicky.y + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
                 flicky.x_vel = nx; flicky.y_vel = ny;
             }
         }
@@ -1359,22 +1571,22 @@ void leer_entrada() {
 
     if (modo_jugadores == 1) {
         u16 value2 = JOY_readJoypad(JOY_2);
-        s16 cazador_offset_x = cazador.x & 7;
-        s16 cazador_offset_y = cazador.y & 7;
+        s16 cazador_offset_x = cazador.x & CELDA_MASK;
+        s16 cazador_offset_y = cazador.y & CELDA_MASK;
 
-        if ((cazador_offset_x <= 3) && (cazador_offset_y <= 3)) {
+        if ((cazador_offset_x <= 3 || cazador_offset_x >= 13) && (cazador_offset_y <= 3 || cazador_offset_y >= 13)) {
             s16 c_nx = 0, c_ny = 0;
             if (value2 & BUTTON_LEFT) c_nx = -1; 
             else if (value2 & BUTTON_RIGHT) c_nx = 1;
             else if (value2 & BUTTON_UP) c_ny = -1; 
             else if (value2 & BUTTON_DOWN) c_ny = 1;
             
-            if (c_nx != 0 || c_ny != 0) {
-                s16 c_tx = (cazador.x >> 3) + c_nx; 
-                s16 c_ty = (cazador.y >> 3) + c_ny; 
+            if ((c_nx != 0 || c_ny != 0) && (c_nx != cazador.x_vel || c_ny != cazador.y_vel)) {
+                s16 c_tx = ((cazador.x + 8) >> CELDA_SHIFT) + c_nx; 
+                s16 c_ty = ((cazador.y + 8) >> CELDA_SHIFT) + c_ny; 
                 if (c_tx >= 0 && c_tx < MAP_WIDTH && c_ty >= 0 && c_ty < MAP_HEIGHT && mapa[c_ty][c_tx] != TILE_MURO) {
-                    cazador.x = (cazador.x >> 3) << 3; 
-                    cazador.y = (cazador.y >> 3) << 3;
+                    cazador.x = ((cazador.x + 8) >> CELDA_SHIFT) << CELDA_SHIFT; 
+                    cazador.y = ((cazador.y + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
                     cazador.x_vel = c_nx; cazador.y_vel = c_ny;
                 }
             }
@@ -1383,37 +1595,38 @@ void leer_entrada() {
 }
 
 void comprobar_recogida_objetos() {
-    u16 cx = (flicky.x + 4) >> 3;
-    u16 cy = (flicky.y + 4) >> 3;
+    u16 cx = (flicky.x + 8) >> CELDA_SHIFT;
+    u16 cy = (flicky.y + 8) >> CELDA_SHIFT;
 
     if (cx < MAP_WIDTH && cy < MAP_HEIGHT) {
         u8 tipo_objeto = mapa[cy][cx];
 
         if (tipo_objeto == TILE_POLLUELO && semillas_en_fila < max_polluelos_nivel) {
             mapa[cy][cx] = TILE_SUELO; 
-            VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), cx, cy); 
-            sprites_seguidores[semillas_en_fila] = SPR_addSprite(&flicky_sprite, flicky.x - FLICKY_DRAW_OFFSET, flicky.y - FLICKY_DRAW_OFFSET, TILE_ATTR(PAL2, 0, FALSE, FALSE));
+            dibujar_celda(cx, cy); 
+            sprites_seguidores[semillas_en_fila] = SPR_addSprite(&chick_sprite, flicky.x, flicky.y + PLAY_Y, TILE_ATTR(PAL2, 0, FALSE, FALSE));
+            SPR_setAnimationLoop(sprites_seguidores[semillas_en_fila], TRUE);
             semillas_en_fila++; 
             reproducir_sonido_waka();
         } 
         else if (tipo_objeto == TILE_GEMA) {
             mapa[cy][cx] = TILE_SUELO; 
-            VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), cx, cy);
+            dibujar_celda(cx, cy);
             flicky.puntuacion += 250;
             reproducir_sonido_item(1400);
             efecto_shake(6, 1);
         } 
         else if (tipo_objeto == TILE_RELOJ) {
             mapa[cy][cx] = TILE_SUELO; 
-            VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), cx, cy);
+            dibujar_celda(cx, cy);
             timer_cazador_lento = DURACION_PODER_FRAMES;
             cazador_en_furia = FALSE; 
-            PAL_setColor(1, color_muro_original);
+            muros_alerta(FALSE);
             reproducir_sonido_item(220);
         } 
         else if (tipo_objeto == TILE_RAYO) {
             mapa[cy][cx] = TILE_SUELO; 
-            VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), cx, cy);
+            dibujar_celda(cx, cy);
             timer_flicky_rapido = DURACION_PODER_FRAMES;
             reproducir_sonido_item(900);
             efecto_shake(8, 2);
@@ -1448,27 +1661,21 @@ void actualizar_logica() {
 
     if (modo_battle_royale && en_preaviso_cierre) {
         if ((frame_counter & 15) < 8) { 
-            PAL_setColor(1, RGB24_TO_VDPCOLOR(0xFF0000)); 
+            muros_alerta(TRUE); 
         } else {
-            PAL_setColor(1, color_muro_original); 
+            muros_alerta(FALSE); 
         }
     }
 
     if (cazador_en_furia) {
         if ((frame_counter & 8) == 0) {
-            PAL_setColor(1, RGB24_TO_VDPCOLOR(0xFF0000));
+            muros_alerta(TRUE);
         } else {
-            PAL_setColor(1, color_muro_original);
+            muros_alerta(FALSE);
         }
     }
 
-    if (salida_abierta) {
-        u16 safe_text_x = (anillo_recorte > 0) ? (anillo_recorte + 1) : 8;
-        u16 safe_text_y = (anillo_recorte > 0) ? (anillo_recorte + 1) : 2;
-        VDP_setTextPalette(PAL0); 
-        if ((frame_counter & 31) < 15) VDP_drawText("¡VE A LA META Y ESCAPA!", safe_text_x, safe_text_y);
-        else VDP_drawText("                       ", safe_text_x, safe_text_y);
-    }
+    // (el aviso de "meta abierta" parpadea en el marcador: ver hud_actualizar)
 
     static u8 frame_timer_60 = 0;
     frame_timer_60++;
@@ -1501,7 +1708,7 @@ void actualizar_logica() {
                     timer_duracion_furia--;
                     if (timer_duracion_furia <= 0) {
                         cazador_en_furia = FALSE;
-                        PAL_setColor(1, color_muro_original);
+                        muros_alerta(FALSE);
                     }
                 }
             }
@@ -1552,27 +1759,27 @@ void actualizar_logica() {
         if (flicky.x_vel == 0 && flicky.y_vel == 0) break;
         s16 next_x = flicky.x + flicky.x_vel;
         s16 next_y = flicky.y + flicky.y_vel;
-        s16 col_x = (flicky.x_vel > 0) ? (next_x + 7) : next_x;
-        s16 col_y = (flicky.y_vel > 0) ? (next_y + 7) : next_y;
+        s16 col_x = (flicky.x_vel > 0) ? (next_x + CELDA_MASK) : next_x;
+        s16 col_y = (flicky.y_vel > 0) ? (next_y + CELDA_MASK) : next_y;
 
-        if (mapa[col_y >> 3][col_x >> 3] != TILE_MURO) {
+        if (mapa[col_y >> CELDA_SHIFT][col_x >> CELDA_SHIFT] != TILE_MURO) {
             flicky.x = next_x;
             flicky.y = next_y;
         } else {
-            flicky.x = (flicky.x >> 3) << 3;
-            flicky.y = (flicky.y >> 3) << 3;
+            flicky.x = ((flicky.x + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
+            flicky.y = ((flicky.y + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
             flicky.x_vel = 0; flicky.y_vel = 0;
         }
 
         historial_x[indice_historial] = flicky.x;
         historial_y[indice_historial] = flicky.y;
-        indice_historial = (indice_historial + 1) & 127; 
+        indice_historial = (indice_historial + 1) & HIST_MASK; 
     }
 
     comprobar_recogida_objetos();
 
-    u16 cx = flicky.x >> 3;
-    u16 cy = flicky.y >> 3;
+    u16 cx = (flicky.x + 8) >> CELDA_SHIFT;
+    u16 cy = (flicky.y + 8) >> CELDA_SHIFT;
 
     if (cx >= NIDO_X && cx <= NIDO_X + NIDO_ANCHO - 1 && cy == NIDO_Y) {
         if (semillas_en_fila > 0) {
@@ -1630,7 +1837,7 @@ void actualizar_logica() {
                 } else { 
                     estado_actual = ESTADO_VICTORIA;
                     VDP_setTextPalette(PAL0);
-                    VDP_drawText("¡HAS ESCAPADO CON EXITO!", 8, 13);
+                    VDP_drawText("HAS ESCAPADO CON EXITO!", 8, 13);
                     PSG_setTone(2, 900);  PSG_setEnvelope(2, 2); waitMs(150);
                     PSG_setTone(2, 1200); waitMs(150);
                     PSG_setTone(2, 1500); waitMs(600);
@@ -1646,8 +1853,8 @@ void actualizar_logica() {
 
     for (u16 i = 0; i < semillas_en_fila; i++) { 
         if (sprites_seguidores[i]) {
-            s16 r = (indice_historial - 1 - ((i + 1) * 6) + MAX_HISTORIAL) & 127; 
-            SPR_setPosition(sprites_seguidores[i], historial_x[r] - FLICKY_DRAW_OFFSET, historial_y[r] - FLICKY_DRAW_OFFSET); 
+            s16 r = (indice_historial - 1 - ((i + 1) * SEPARACION_POLLUELOS) + MAX_HISTORIAL) & HIST_MASK; 
+            SPR_setPosition(sprites_seguidores[i], historial_x[r], historial_y[r] + PLAY_Y); 
         }
     }
 
@@ -1661,11 +1868,11 @@ void actualizar_logica() {
         if (cazador.x_vel != 0 || cazador.y_vel != 0) SPR_nextFrame(cazador.sprite); else SPR_setFrame(cazador.sprite, 0);
     }
     
-    SPR_setPosition(flicky.sprite, flicky.x - FLICKY_DRAW_OFFSET, flicky.y - FLICKY_DRAW_OFFSET);
+    SPR_setPosition(flicky.sprite, flicky.x - FLICKY_DRAW_OFFSET + shake_x, flicky.y + PLAY_Y - FLICKY_DRAW_OFFSET);
     mover_cazador();
 
     // ===== COLISIÓN CON CAZADOR (MECÁNICAS AJUSTADAS) =====
-    if (abs(flicky.x - cazador.x) < 8 && abs(flicky.y - cazador.y) < 8) {
+    if (abs(flicky.x - cazador.x) < 12 && abs(flicky.y - cazador.y) < 12) {
         if (flicky_invulnerable) {
             // Ignorar daño durante la inmunidad temporal
         }
@@ -1675,7 +1882,7 @@ void actualizar_logica() {
             reproducir_sonido_panico();
             victorias_cazador++;
             VDP_setTextPalette(PAL0);
-            VDP_drawText("¡LA RABIA TE DESTRUYO!", 8, 13);
+            VDP_drawText("LA RABIA TE DESTRUYO!", 8, 13);
             PSG_setTone(2, 180); PSG_setEnvelope(2, 2);
             for (u16 f = 0; f < 90; f++) {
                 if (f == 40) PSG_setTone(2, 100);
@@ -1720,21 +1927,7 @@ void actualizar_logica() {
         }
     }
 
-    char m[55];
-    u16 min = tiempo_restante_segundos / 60;
-    u16 seg = tiempo_restante_segundos - (min * 60); 
-    
-    VDP_setTextPalette(PAL0);
-    if (modo_jugadores == 1) {
-        sprintf(m, "VERSUS | P1 SCORE:%d - P2 SCORE:%d | T:%01d:%02d", (u16)victorias_pajaro, (u16)victorias_cazador, min, seg);
-    } else {
-        if (modo_juego_seleccionada == 0) {
-            sprintf(m, "W%d-L%d PTS:%05ld | T:%01d:%02d | H:%d/%d | C:%d", mundo_actual+1, fase_actual, flicky.puntuacion, min, seg, total_salvados, max_polluelos_nivel, continues_restantes);
-        } else {
-            sprintf(m, "LIBRE  PTS:%05ld | T:%01d:%02d | H:%d/%d | C:%d", flicky.puntuacion, min, seg, total_salvados, max_polluelos_nivel, continues_restantes);
-        }
-    }
-    VDP_drawText(m, 0, 27); 
+    hud_actualizar();
 }
 
 void mover_cazador() {
@@ -1764,8 +1957,8 @@ void mover_cazador() {
 
     for (u8 p = 0; p < pasos; p++) {
         if (modo_jugadores == 0) {
-            if (((cazador.x & 7) == 0) && ((cazador.y & 7) == 0)) {
-                s16 tx = cazador.x >> 3, ty = cazador.y >> 3;
+            if (((cazador.x & CELDA_MASK) == 0) && ((cazador.y & CELDA_MASK) == 0)) {
+                s16 tx = cazador.x >> CELDA_SHIFT, ty = cazador.y >> CELDA_SHIFT;
                 bool lizq = (tx > 0) && (mapa[ty][tx - 1] != TILE_MURO) && (cazador.x_vel != 1);
                 bool lder = (tx < MAP_WIDTH - 1) && (mapa[ty][tx + 1] != TILE_MURO) && (cazador.x_vel != -1);
                 bool larr = (ty > 0) && (mapa[ty - 1][tx] != TILE_MURO) && (cazador.y_vel != 1);
@@ -1775,10 +1968,10 @@ void mover_cazador() {
 
                 if (semillas_en_fila > 0 && ((random() & 63) < 45)) { 
                     s16 ox = 0, oy = 0;
-                    if ((flicky.x >> 3) < tx && lizq) { ox = -1; oy = 0; }
-                    else if ((flicky.x >> 3) > tx && lder) { ox = 1; oy = 0; }
-                    else if ((flicky.y >> 3) < ty && larr) { ox = 0; oy = -1; }
-                    else if ((flicky.y >> 3) > ty && laba) { ox = 0; oy = 1; }
+                    if (((flicky.x + 8) >> CELDA_SHIFT) < tx && lizq) { ox = -1; oy = 0; }
+                    else if (((flicky.x + 8) >> CELDA_SHIFT) > tx && lder) { ox = 1; oy = 0; }
+                    else if (((flicky.y + 8) >> CELDA_SHIFT) < ty && larr) { ox = 0; oy = -1; }
+                    else if (((flicky.y + 8) >> CELDA_SHIFT) > ty && laba) { ox = 0; oy = 1; }
                     if (ox != 0 || oy != 0) { cazador.x_vel = ox; cazador.y_vel = oy; blq = FALSE; }
                 }
                 if (blq || ((random() & 31) < 3)) { 
@@ -1791,21 +1984,21 @@ void mover_cazador() {
         }
 
         s16 px = cazador.x + cazador.x_vel, py = cazador.y + cazador.y_vel;
-        s16 c_col_x = (cazador.x_vel > 0) ? (px + 7) : px;
-        s16 c_col_y = (cazador.y_vel > 0) ? (py + 7) : py;
+        s16 c_col_x = (cazador.x_vel > 0) ? (px + CELDA_MASK) : px;
+        s16 c_col_y = (cazador.y_vel > 0) ? (py + CELDA_MASK) : py;
 
-        if (mapa[c_col_y >> 3][c_col_x >> 3] != TILE_MURO) { 
+        if (mapa[c_col_y >> CELDA_SHIFT][c_col_x >> CELDA_SHIFT] != TILE_MURO) { 
             cazador.x = px; cazador.y = py; 
         } else { 
-            cazador.x = (cazador.x >> 3) << 3; cazador.y = (cazador.y >> 3) << 3; 
+            cazador.x = ((cazador.x + 8) >> CELDA_SHIFT) << CELDA_SHIFT; cazador.y = ((cazador.y + 8) >> CELDA_SHIFT) << CELDA_SHIFT; 
             cazador.x_vel = 0; cazador.y_vel = 0; 
         }
     }
 
-    bool cazador_mira_izquierda = (mundo_actual == MUNDO_VOLCAN || mundo_actual == MUNDO_MARINO || mundo_actual == MUNDO_CELESTE);
+    bool cazador_mira_izquierda = FALSE;   // todos los sprites nuevos miran a la derecha
     actualizar_anim_direccion(&cazador.anim_actual, cazador.sprite, cazador.x_vel, cazador.y_vel, cazador_mira_izquierda);
     
-    SPR_setPosition(cazador.sprite, cazador.x - CAZADOR_DRAW_OFFSET, cazador.y - CAZADOR_DRAW_OFFSET);
+    SPR_setPosition(cazador.sprite, cazador.x - CAZADOR_DRAW_OFFSET + shake_x, cazador.y + PLAY_Y - CAZADOR_DRAW_OFFSET_Y);
 }
 
 void actualizar_anim_direccion(u8* a, Sprite* s, s16 xv, s16 yv, bool mirar_izquierda_por_defecto) {
