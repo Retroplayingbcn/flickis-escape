@@ -158,14 +158,15 @@ def sheet(frames_rows, fw, fh, pal_index_fn, pal, path):
     save_indexed(path, pix, W, H, pal)
 
 def gen_hero():
-    rows = []
-    for base in (HV.FRONT, HV.BACK, HV.SIDE):
-        f = base[-1]
-        rows.append([base, bob(base, 1, '......OO........' if base is not HV.SIDE else '.......OO.......'),
-                     base, bob(base, 1, '.........OO.....' if base is not HV.SIDE else '.........OO.....')])
-    sheet(rows, 16, 16, idx_hero, HPAL, os.path.join(OUT, 'hero.png'))
-    ch = [CHICK, bob(CHICK, 1, '................')]
+    import anim
+    sheet(anim.hero_rows(), 16, 16, idx_hero, HPAL, os.path.join(OUT, 'hero.png'))
+    ch = anim.chick_frames(CHICK)
     sheet([ch], 16, 16, idx_hero, HPAL, os.path.join(OUT, 'chick.png'))
+    # same frames as BG tiles (4 tiles per frame) to animate the chicks lying on the map
+    tiles = []
+    for art in ch: tiles += art_tiles(art)
+    save_indexed(os.path.join(OUT, 'chick_tiles.png'), strip(tiles), 8, 8*len(tiles), HPAL)
+    sheet([anim.SPARK], 16, 16, idx_hero, HPAL, os.path.join(OUT, 'spark.png'))
 
 # hunter: front / back / side drawn here (original design)
 HUNTER_FRONT = CAST.HUNTER
@@ -229,24 +230,50 @@ def gen_hunter():
     def idx(ch):
         if ch == '.': return 0
         return keys.index(remap.get(ch, ch))
-    def walk(base, alt):
-        legs_a = base[:19] + base[19:]
-        # simple stride: shift bottom 5 rows 1px left/right
-        def shift(rows, d): return [('.'*d + r[:-d]) if d > 0 else (r[-d:] + '.'*(-d)) for r in rows]
-        a = base[:18] + shift(base[18:], 1)
-        b = base[:18] + shift(base[18:], -1)
-        up = base[1:] + ['.'*24]
-        return [base, a if alt else up, base, b]
-    rows = [walk(HUNTER_FRONT, False), walk(HUNTER_BACK, False), walk(HUNTER_SIDE, True)]
+    def region_shift(rows, y0, y1, x0, x1, dx, dy):
+        g = [list(r) for r in rows]
+        src = [[rows[y][x] for x in range(x0, x1+1)] for y in range(y0, y1+1)]
+        for y in range(y0, y1+1):
+            for x in range(x0, x1+1): g[y][x] = '.'
+        for j, r in enumerate(src):
+            for i, c in enumerate(r):
+                ny, nx = y0+j+dy, x0+i+dx
+                if c != '.' and 0 <= ny < 24 and 0 <= nx < 24: g[ny][nx] = c
+        return [''.join(r) for r in g]
+    def bob(rows, upto):
+        return region_shift(rows, 1, upto, 0, 23, 0, -1)
+    def walk_front(base, legs_y):
+        f1 = region_shift(bob(base, legs_y-1), legs_y, 22, 0, 11, 0, -1)
+        f3 = region_shift(bob(base, legs_y-1), legs_y, 22, 12, 23, 0, -1)
+        return [base, f1, base, f3]
+    def walk_side(base):
+        wide = region_shift(region_shift(base, 19, 22, 0, 11, -1, 0), 19, 22, 12, 23, 1, 0)
+        tight = region_shift(region_shift(base, 19, 22, 0, 11, 1, 0), 19, 22, 12, 23, -1, 0)
+        return [base, bob(wide, 18), base, bob(tight, 18)]
+    rows = [walk_front(HUNTER_FRONT, 20), walk_front(HUNTER_BACK, 20), walk_side(HUNTER_SIDE)]
     sheet(rows, 24, 24, idx, pal, os.path.join(OUT, 'hunter.png'))
 
 # ------------------------------------------------------------------ FONT (96 chars, PAL index 15 white / 14 shadow)
-def gen_font():
+EXTRA_GLYPHS = {
+ '>': ["#....",".#...","..#..","...#.","..#..",".#...","#...."],
+ '<': ["....#","...#.","..#..",".#...","..#..","...#.","....#"],
+ '|': ["..#..","..#..","..#..","..#..","..#..","..#..","..#.."],
+ '=': [".....",".....","#####",".....","#####",".....","....."],
+ '+': [".....","..#..","..#..","#####","..#..","..#..","....."],
+ '%': ["##..#","##.#.","..#..",".#...","#.##.","#..##","....."],
+ '#': [".#.#.","#####",".#.#.",".#.#.","#####",".#.#.","....."],
+ '[': [".###.",".#...",".#...",".#...",".#...",".#...",".###."],
+ ']': [".###.","...#.","...#.","...#.","...#.","...#.",".###."],
+ '_': [".....",".....",".....",".....",".....",".....","#####"],
+ '$': ["..#..",".####","#.#..",".###.","..#.#","####.","..#.."],
+ '@': [".###.","#...#","#.###","#.#.#","#.###","#....",".###."],
+}
+def gen_font(opaque=False):
     tiles = []
     for code in range(32, 128):
         ch = chr(code)
-        g = F.G.get(ch) or F.G.get(ch.upper()) or F.G.get(' ')
-        t = [[0]*8 for _ in range(8)]
+        g = EXTRA_GLYPHS.get(ch) or F.G.get(ch) or F.G.get(ch.upper()) or F.G.get(' ')
+        t = [[13 if opaque else 0]*8 for _ in range(8)]
         for y in range(7):
             for x in range(5):
                 if g[y][x] == '#':
@@ -263,7 +290,7 @@ def gen_font():
         for y in range(8):
             for x in range(8): pix[cy+y][cx+x] = t[y][x]
     pal = [(0,0,0)] + [(0,0,0)]*13 + [(0,0,0), (255,255,255)]
-    save_indexed(os.path.join(OUT, 'font.png'), pix, W, H, pal)
+    save_indexed(os.path.join(OUT, 'font_menu.png' if opaque else 'font.png'), pix, W, H, pal)
 
 # ------------------------------------------------------------------ HUD FONT (8x16 cells, bar background baked in, PAL0)
 HUD_CHARS = " 0123456789:/-xABCDEFGHIJKLMNOPQRSTUVWXYZ!"
@@ -289,5 +316,5 @@ def gen_hud():
 
 if __name__ == '__main__':
     for w in WORLDS: gen_world(w)
-    gen_items(); gen_hero(); gen_hunter(); gen_font(); gen_hud()
+    gen_items(); gen_hero(); gen_hunter(); gen_font(); gen_font(True); gen_hud()
     print('assets written to', OUT)

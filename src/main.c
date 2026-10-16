@@ -29,6 +29,8 @@
 #define ANIM_ABAJO  0
 #define ANIM_ARRIBA 1
 #define ANIM_LADO   2
+#define ANIM_HERIDO 3
+#define ANIM_FELIZ  4
 
 // --- ESTADOS DE JUEGO ---
 #define ESTADO_TITULO      0  
@@ -571,6 +573,13 @@ void inicializar_juego();
 void resetear_tiempo_nivel();
 void leer_entrada();
 void actualizar_logica();
+void efecto_chispa(s16 x, s16 y);
+void efectos_actualizar();
+void efectos_reset();
+void animar_polluelos_mapa();
+void cazador_tinte_actualizar();
+void banner(const char* txt);
+void secuencia_heroe(u8 anim, u16 frames, bool salta);
 void mover_cazador();
 void generar_mapa_aleatorio();
 void actualizar_anim_direccion(u8* anim_actual, Sprite* sprite, s16 x_vel, s16 y_vel, bool mirar_izquierda_por_defecto);
@@ -658,6 +667,7 @@ void cargar_graficos_mundo() {
     VDP_loadTileSet(&ts_bosque_floor, base_floor, DMA);
     VDP_loadTileSet(&ts_items, base_items, DMA);
     VDP_loadTileSet(&ts_hud, base_hud, DMA);
+    VDP_loadFont(&ts_font, DMA);
     PAL_setPalette(PAL0, pal_bosque_maze.data, CPU);
     PAL_setPalette(PAL1, pal_bosque_floor.data, CPU);
     PAL_setPalette(PAL2, pal_items.data, CPU);
@@ -665,12 +675,23 @@ void cargar_graficos_mundo() {
     VDP_setTextPalette(PAL0);
 }
 
-// Muros en alerta (rabia / cierre): tiñe los 5 tonos del muro de rojo
-void muros_alerta(bool activa) {
-    static const u16 rojos[5] = { RGB24_TO_VDPCOLOR(0xD83020), RGB24_TO_VDPCOLOR(0x902018), RGB24_TO_VDPCOLOR(0xF06040),
-                                  RGB24_TO_VDPCOLOR(0xFFA080), RGB24_TO_VDPCOLOR(0x601010) };
-    for (u16 i = 0; i < 5; i++) PAL_setColor(1 + i, activa ? rojos[i] : pal_maze_actual->data[1 + i]);
+// Muros en alerta (rabia / cierre): mezcla los 5 tonos del muro con rojo (nivel 0..8)
+static const u16 rojos_alerta[5] = { RGB24_TO_VDPCOLOR(0xD83020), RGB24_TO_VDPCOLOR(0x902018), RGB24_TO_VDPCOLOR(0xF06040),
+                                     RGB24_TO_VDPCOLOR(0xFFA080), RGB24_TO_VDPCOLOR(0x601010) };
+void muros_mezcla(u16 nivel) {
+    static u16 nivel_actual = 0xFFFF;
+    if (nivel == nivel_actual) return;
+    nivel_actual = nivel;
+    for (u16 i = 0; i < 5; i++) {
+        u16 a = pal_maze_actual->data[1 + i], b = rojos_alerta[i], c = 0;
+        for (u16 sh = 1; sh <= 9; sh += 4) {
+            s16 ca = (a >> sh) & 7, cb = (b >> sh) & 7;
+            c |= ((u16)(ca + ((cb - ca) * (s16)nivel) / 8) & 7) << sh;
+        }
+        PAL_setColor(1 + i, c);
+    }
 }
+void muros_alerta(bool activa) { muros_mezcla(activa ? 8 : 0); }
 
 // ---------------- MARCADOR (fuente 8x16 con fondo integrado, en el plano B) ----------------
 static u32 hud_cache_puntos = 0xFFFFFFFF;
@@ -732,8 +753,13 @@ void hud_actualizar() {
             hud_icono(4, 36);   // cabeza del protagonista
         }
         if (hud_cache_puntos != flicky.puntuacion) {
-            hud_cache_puntos = flicky.puntuacion;
-            sprintf(buf, "%06ld", flicky.puntuacion); hud_texto(buf, 13);
+            // el marcador "cuenta" hasta la puntuación real
+            if (hud_cache_puntos > flicky.puntuacion) hud_cache_puntos = flicky.puntuacion;
+            else {
+                u32 dif = flicky.puntuacion - hud_cache_puntos;
+                hud_cache_puntos += (dif > 400) ? 50 : ((dif > 40) ? 10 : dif);
+            }
+            sprintf(buf, "%06ld", hud_cache_puntos); hud_texto(buf, 13);
         }
         u8 parpadeo = salida_abierta ? ((frame_counter >> 4) & 1) : 0;
         u16 huevos = total_salvados * 100 + max_polluelos_nivel;
@@ -747,9 +773,14 @@ void hud_actualizar() {
             sprintf(buf, "x%d", continues_restantes); hud_texto(buf, 38);
         }
     }
-    if (hud_cache_tiempo != tiempo_restante_segundos) {
-        hud_cache_tiempo = tiempo_restante_segundos;
-        sprintf(buf, "%d:%02d", min, seg);
+    // con poco tiempo el reloj parpadea
+    u16 clave_tiempo = tiempo_restante_segundos;
+    bool oculto = (tiempo_restante_segundos <= 15) && ((frame_counter & 16) != 0);
+    if (oculto) clave_tiempo |= 0x8000;
+    if (hud_cache_tiempo != clave_tiempo) {
+        hud_cache_tiempo = clave_tiempo;
+        if (oculto) strcpy(buf, "    ");
+        else sprintf(buf, "%d:%02d", min, seg);
         hud_texto(buf, (modo_jugadores == 1) ? 31 : 25);
     }
 }
@@ -1056,6 +1087,7 @@ void mostrar_pantalla_titulo() {
     VDP_clearPlane(BG_B, TRUE);
     PAL_setPalette(PAL0, bg_title.palette->data, CPU);
     VDP_drawImageEx(BG_B, &bg_title, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    VDP_loadFont(&ts_font, DMA);
     VDP_setTextPalette(PAL0);
     PAL_setColor(15, RGB24_TO_VDPCOLOR(0xFFFFFF));
     
@@ -1071,8 +1103,11 @@ void mostrar_menu_opciones() {
     PAL_setPalette(PAL1, bg_opciones.palette->data, CPU);
     VDP_drawImageEx(BG_B, &bg_opciones, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
 
+    VDP_loadFont(&ts_font_menu, DMA);          // fuente con fondo opaco: legible sobre la ilustración
     VDP_setTextPalette(PAL2);
-    PAL_setColor(47, RGB24_TO_VDPCOLOR(0xFFFFFF)); 
+    PAL_setColor(47, RGB24_TO_VDPCOLOR(0xFFFFFF));
+    PAL_setColor(46, RGB24_TO_VDPCOLOR(0x000000));
+    PAL_setColor(45, RGB24_TO_VDPCOLOR(0x182030)); 
 
     musica_segun_estado(ESTADO_MENU);
 
@@ -1114,6 +1149,7 @@ void mostrar_menu_versus() {
     VDP_clearPlane(BG_B, TRUE);
     char buf[40];
 
+    VDP_loadFont(&ts_font, DMA);
     PAL_setPalette(PAL0, bg_versus.palette->data, CPU);
     VDP_drawImageEx(BG_B, &bg_versus, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
     
@@ -1269,6 +1305,7 @@ void finalizar_partida() {
     VDP_setHorizontalScroll(BG_A, 0);
     VDP_setHorizontalScroll(BG_B, 0);
     
+    efectos_reset();
     SPR_clear();
     SPR_update();
     SYS_doVBlankProcess();
@@ -1607,12 +1644,14 @@ void comprobar_recogida_objetos() {
             sprites_seguidores[semillas_en_fila] = SPR_addSprite(&chick_sprite, flicky.x, flicky.y + PLAY_Y, TILE_ATTR(PAL2, 0, FALSE, FALSE));
             SPR_setAnimationLoop(sprites_seguidores[semillas_en_fila], TRUE);
             semillas_en_fila++; 
+            efecto_chispa(cx * CELDA, cy * CELDA);
             reproducir_sonido_waka();
         } 
         else if (tipo_objeto == TILE_GEMA) {
             mapa[cy][cx] = TILE_SUELO; 
             dibujar_celda(cx, cy);
             flicky.puntuacion += 250;
+            efecto_chispa(cx * CELDA, cy * CELDA);
             reproducir_sonido_item(1400);
             efecto_shake(6, 1);
         } 
@@ -1622,12 +1661,14 @@ void comprobar_recogida_objetos() {
             timer_cazador_lento = DURACION_PODER_FRAMES;
             cazador_en_furia = FALSE; 
             muros_alerta(FALSE);
+            efecto_chispa(cx * CELDA, cy * CELDA);
             reproducir_sonido_item(220);
         } 
         else if (tipo_objeto == TILE_RAYO) {
             mapa[cy][cx] = TILE_SUELO; 
             dibujar_celda(cx, cy);
             timer_flicky_rapido = DURACION_PODER_FRAMES;
+            efecto_chispa(cx * CELDA, cy * CELDA);
             reproducir_sonido_item(900);
             efecto_shake(8, 2);
         }
@@ -1644,6 +1685,9 @@ void comprobar_recogida_objetos() {
 }
 
 void actualizar_logica() {
+    efectos_actualizar();
+    animar_polluelos_mapa();
+    cazador_tinte_actualizar();
     frame_counter++;
 
     efecto_shake_actualizar();
@@ -1660,19 +1704,14 @@ void actualizar_logica() {
     }
 
     if (modo_battle_royale && en_preaviso_cierre) {
-        if ((frame_counter & 15) < 8) { 
-            muros_alerta(TRUE); 
-        } else {
-            muros_alerta(FALSE); 
-        }
+        u16 fase = (frame_counter >> 1) & 15;
+        muros_mezcla(fase < 8 ? fase : 16 - fase);
     }
 
     if (cazador_en_furia) {
-        if ((frame_counter & 8) == 0) {
-            muros_alerta(TRUE);
-        } else {
-            muros_alerta(FALSE);
-        }
+        // pulso suave (sin parpadeo brusco a pantalla completa)
+        u16 fase = (frame_counter >> 1) & 15;
+        muros_mezcla(fase < 8 ? fase : 16 - fase);
     }
 
     // (el aviso de "meta abierta" parpadea en el marcador: ver hud_actualizar)
@@ -1792,7 +1831,9 @@ void actualizar_logica() {
                 }
                 total_salvados++; 
                 reproducir_sonido_deposito(i); 
-                for(s16 d=0; d<6; d++) SYS_doVBlankProcess(); 
+                efecto_chispa((NIDO_X * CELDA) + ((i & 1) ? 16 : 0), NIDO_Y * CELDA - 4);
+                hud_actualizar();
+                for(s16 d=0; d<6; d++) { efectos_actualizar(); SPR_update(); SYS_doVBlankProcess(); }
             }
             flicky.puntuacion += (c * 100);
             efecto_shake(8, 1);
@@ -1810,6 +1851,10 @@ void actualizar_logica() {
                 return;
             } else {
                 victorias_pajaro++;
+                muros_alerta(FALSE);
+                cazador_en_furia = FALSE; timer_cazador_lento = 0; cazador_tinte_actualizar();
+                banner("FASE SUPERADA!");
+                secuencia_heroe(ANIM_FELIZ, 100, TRUE);
                 if (modo_juego_seleccionada == 0) { 
                     fase_actual++;
                     if (fase_actual > 5) {
@@ -1836,8 +1881,7 @@ void actualizar_logica() {
                     }
                 } else { 
                     estado_actual = ESTADO_VICTORIA;
-                    VDP_setTextPalette(PAL0);
-                    VDP_drawText("HAS ESCAPADO CON EXITO!", 8, 13);
+                    banner("HAS ESCAPADO CON EXITO!");
                     PSG_setTone(2, 900);  PSG_setEnvelope(2, 2); waitMs(150);
                     PSG_setTone(2, 1200); waitMs(150);
                     PSG_setTone(2, 1500); waitMs(600);
@@ -1881,13 +1925,18 @@ void actualizar_logica() {
             efecto_shake(20, 3);
             reproducir_sonido_panico();
             victorias_cazador++;
-            VDP_setTextPalette(PAL0);
-            VDP_drawText("LA RABIA TE DESTRUYO!", 8, 13);
+            muros_alerta(TRUE);
+            banner("LA RABIA TE DESTRUYO!");
             PSG_setTone(2, 180); PSG_setEnvelope(2, 2);
-            for (u16 f = 0; f < 90; f++) {
+            SPR_setAnim(flicky.sprite, ANIM_HERIDO); flicky.anim_actual = ANIM_HERIDO; SPR_setHFlip(flicky.sprite, FALSE);
+            for (u16 f = 0; f < 100; f++) {
                 if (f == 40) PSG_setTone(2, 100);
                 if (f == 70) PSG_setEnvelope(2, 15);
                 if (f < 30) efecto_shake_actualizar();
+                SPR_setFrame(flicky.sprite, (f >> 3) & 3);
+                SPR_setPosition(flicky.sprite, flicky.x + shake_x, flicky.y + PLAY_Y);
+                efectos_actualizar();
+                SPR_update();
                 SYS_doVBlankProcess();
             }
             if (continues_restantes > 0) { mostrar_pantalla_continue(); } else { mostrar_game_over(); }
@@ -1913,13 +1962,18 @@ void actualizar_logica() {
             efecto_shake(20, 3);
             reproducir_sonido_panico();
             victorias_cazador++;
-            VDP_setTextPalette(PAL0);
-            VDP_drawText("EL CAZADOR TE ATRAPO!", 8, 13);
+            muros_alerta(FALSE);
+            banner("EL CAZADOR TE ATRAPO!");
             PSG_setTone(2, 180); PSG_setEnvelope(2, 2);
-            for (u16 f = 0; f < 90; f++) {
+            SPR_setAnim(flicky.sprite, ANIM_HERIDO); flicky.anim_actual = ANIM_HERIDO; SPR_setHFlip(flicky.sprite, FALSE);
+            for (u16 f = 0; f < 100; f++) {
                 if (f == 40) PSG_setTone(2, 100);
                 if (f == 70) PSG_setEnvelope(2, 15);
                 if (f < 30) efecto_shake_actualizar();
+                SPR_setFrame(flicky.sprite, (f >> 3) & 3);
+                SPR_setPosition(flicky.sprite, flicky.x + shake_x, flicky.y + PLAY_Y);
+                efectos_actualizar();
+                SPR_update();
                 SYS_doVBlankProcess();
             }
             if (continues_restantes > 0) { mostrar_pantalla_continue(); } else { mostrar_game_over(); }
@@ -2021,5 +2075,97 @@ void actualizar_anim_direccion(u8* a, Sprite* s, s16 xv, s16 yv, bool mirar_izqu
             if (xv < 0) SPR_setHFlip(s, TRUE); 
             else SPR_setHFlip(s, FALSE);
         }
+    }
+}
+
+// ================= FASE 2: EFECTOS Y ANIMACIONES =================
+#define MAX_CHISPAS 6
+static Sprite* chispas[MAX_CHISPAS];
+static u8 chispa_timer[MAX_CHISPAS];
+
+void efectos_reset() {
+    // SPR_clear() solo oculta: hay que liberar los sprites de verdad
+    for (u16 i = 0; i < MAX_CHISPAS; i++) {
+        if (chispas[i]) SPR_releaseSprite(chispas[i]);
+        chispas[i] = NULL; chispa_timer[i] = 0;
+    }
+}
+
+void efecto_chispa(s16 x, s16 y) {
+    for (u16 i = 0; i < MAX_CHISPAS; i++) {
+        if (chispas[i] == NULL) {
+            chispas[i] = SPR_addSprite(&spark_sprite, x + shake_x, y + PLAY_Y, TILE_ATTR(PAL2, 1, FALSE, FALSE));
+            if (chispas[i]) { SPR_setAnimationLoop(chispas[i], FALSE); chispa_timer[i] = 16; }
+            return;
+        }
+    }
+}
+
+void efectos_actualizar() {
+    for (u16 i = 0; i < MAX_CHISPAS; i++) {
+        if (chispas[i] && --chispa_timer[i] == 0) { SPR_releaseSprite(chispas[i]); chispas[i] = NULL; }
+    }
+}
+
+// Los polluelos del mapa (plano A) se animan cambiando sus 4 tiles en VRAM
+void animar_polluelos_mapa() {
+    static u8 t = 0, f = 0;
+    if (++t < 10) return;
+    t = 0; f = (f + 1) & 3;
+    VDP_loadTileData(ts_chick_anim.tiles + f * 4 * 8, base_items, 4, DMA);
+}
+
+// Cazador: rojo en modo rabia, azulado cuando el reloj lo ralentiza
+void cazador_tinte_actualizar() {
+    static u8 tinte_actual = 0xFF;
+    u8 tinte = cazador_en_furia ? 1 : ((timer_cazador_lento > 0) ? 2 : 0);
+    if (tinte == tinte_actual || cazador.sprite == NULL) return;
+    tinte_actual = tinte;
+    const u16* src = cazador.sprite->definition->palette->data;
+    for (u16 i = 1; i < 16; i++) {
+        u16 c = src[i];
+        u16 r = (c >> 1) & 7, g = (c >> 5) & 7, b = (c >> 9) & 7;
+        if (tinte == 1) { r = (r + 4 > 7) ? 7 : r + 4; g >>= 1; b >>= 1; }
+        else if (tinte == 2) { b = (b + 3 > 7) ? 7 : b + 3; r >>= 1; }
+        PAL_setColor(48 + i, (b << 9) | (g << 5) | (r << 1));
+    }
+}
+
+// Cartel centrado sobre el laberinto (fondo de la barra del marcador)
+void banner(const char* txt) {
+    u16 len = strlen(txt);
+    u16 x0 = (40 - len) / 2 - 2, x1 = x0 + len + 3;
+    // arriba o abajo, para no tapar al protagonista
+    u16 yc = ((flicky.y + PLAY_Y) >> 3) < 15 ? 21 : 7;
+    for (u16 y = yc - 1; y <= yc + 1; y++) {
+        for (u16 x = x0; x <= x1; x++) {
+            u16 tile = base_maze + 72;
+            u16 attr = TILE_ATTR_FULL(PAL0, 1, 0, 0, tile);
+            if (y == yc + 1) attr = TILE_ATTR_FULL(PAL0, 1, 0, 0, base_maze + 73);
+            if (y == yc - 1) attr = TILE_ATTR_FULL(PAL0, 1, 1, 0, base_maze + 73);
+            VDP_setTileMapXY(BG_B, attr, x, y);
+            VDP_setTileMapXY(BG_A, 0, x, y);
+        }
+    }
+    VDP_setTextPalette(PAL0);
+    VDP_setTextPriority(1);
+    VDP_drawText(txt, (40 - len) / 2, yc);
+    VDP_setTextPriority(0);
+}
+
+// Reproduce una animación del protagonista bloqueando el juego (celebración)
+void secuencia_heroe(u8 anim, u16 frames, bool salta) {
+    if (!flicky.sprite) return;
+    static const s8 salto[8] = {0, -3, -5, -6, -6, -5, -3, 0};
+    SPR_setAnim(flicky.sprite, anim); flicky.anim_actual = anim; SPR_setHFlip(flicky.sprite, FALSE);
+    for (u16 f = 0; f < frames; f++) {
+        SPR_setFrame(flicky.sprite, (f >> 3) & 3);
+        s16 dy = salta ? salto[(f >> 1) & 7] : 0;
+        SPR_setPosition(flicky.sprite, flicky.x, flicky.y + PLAY_Y + dy);
+        if ((f & 15) == 0) efecto_chispa(flicky.x + ((f & 16) ? -10 : 10), flicky.y - 6);
+        efectos_actualizar();
+        musica_actualizar();
+        SPR_update();
+        SYS_doVBlankProcess();
     }
 }

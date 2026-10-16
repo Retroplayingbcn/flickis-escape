@@ -37,5 +37,8 @@ extern const TileSet ts_font;
 extern const SpriteDefinition hero_sprite;
 extern const SpriteDefinition chick_sprite;
 extern const SpriteDefinition hunter_sprite;
+extern const TileSet ts_chick_anim;
+extern const SpriteDefinition spark_sprite;
+extern const TileSet ts_font_menu;
 
 #endif // _RES_RESOURCES_H_
