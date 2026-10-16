@@ -274,50 +274,78 @@ SKY = [(56, 96, 200), (90, 140, 230), (140, 186, 250), (190, 220, 255), (0, 0, 0
 NIGHT = [(16, 16, 48), (32, 32, 80), (56, 56, 112), (255, 240, 190), (16, 40, 40), (24, 56, 40),
          (40, 80, 50), (0, 0, 0)]
 
+def nest(img, cx, cy, weave=(11, 12), dark=9, egg=15, shade=4):
+    """woven nest with three eggs, drawn with scene palette indices."""
+    for y in range(cy - 14, cy + 8):
+        for x in range(cx - 24, cx + 25):
+            d = ((x - cx) / 24.0) ** 2 + ((y - cy) / 8.0) ** 2
+            if d < 1 and y >= cy - 4:
+                img[y, x] = dark if d > 0.78 else (weave[0] if (x + 2 * y) % 5 else weave[1])
+    for ex in (cx - 9, cx, cx + 9):
+        disc(img, ex, cy - 7 - (2 if ex == cx else 0), 5, egg, 1.25)
+        img[cy - 10, ex - 2] = 15
+
+def story_panel(img):
+    panel(img, 8, 172, 312, 220)
+
+def variants(es, en):
+    return (('', es), ('_en', en))
+
 def main():
-    # ---------------- title
+    # ---------------- title (same in both languages)
     img = canvas(); forest_scene(img, ground_y=176)
     big_text(img, "FLICKI'S", 0, 18, 5, [10, 11, 12], center=True)
     big_text(img, "ESCAPE", 0, 72, 5, [10, 11, 12], center=True)
     save(img, pal(FOREST), 'bg_title.png')
 
-    # ---------------- menus (options / versus / how to play / continue)
+    # ---------------- language select
+    img = canvas(); forest_scene(img, ground_y=176)
+    big_text(img, "FLICKI'S ESCAPE", 0, 20, 3, [10, 11, 12], center=True)
+    panel(img, 64, 80, 256, 160)
+    save(img, pal(FOREST), 'bg_idioma.png')
+
+    # ---------------- menus
     MENU = [(40, 92, 64), (48, 104, 72), (64, 128, 84), (0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0)]
-    img = canvas(); pattern_bg(img, 1, 2, 3)
-    panel(img, 8, 38, 312, 218)
-    big_text(img, "OPCIONES", 0, 9, 3, [10, 11, 12], center=True)
-    save(img, pal(MENU), 'bg_opciones.png')
+    for suf, t in variants("OPCIONES", "OPTIONS"):
+        img = canvas(); pattern_bg(img, 1, 2, 3)
+        panel(img, 8, 38, 312, 218)
+        big_text(img, t, 0, 9, 3, [10, 11, 12], center=True)
+        save(img, pal(MENU), f'bg_opciones{suf}.png')
 
     img = canvas(); pattern_bg(img, 1, 2, 3)
     panel(img, 16, 38, 304, 218)
     big_text(img, "VERSUS", 0, 9, 3, [10, 11, 12], center=True)
     save(img, pal([(80, 30, 40), (100, 40, 52), (130, 56, 64)] + [(0, 0, 0)] * 5), 'bg_versus.png')
 
-    img = canvas(); pattern_bg(img, 1, 2, 3)
-    panel(img, 8, 38, 312, 218)
-    big_text(img, "COMO JUGAR", 0, 9, 3, [10, 11, 12], center=True)
-    save(img, pal(MENU), 'bg_como_jugar.png')
+    for suf, t in variants("COMO JUGAR", "HOW TO PLAY"):
+        img = canvas(); pattern_bg(img, 1, 2, 3)
+        panel(img, 8, 38, 312, 218)
+        big_text(img, t, 0, 9, 3, [10, 11, 12], center=True)
+        save(img, pal(MENU), f'bg_como_jugar{suf}.png')
 
     # ---------------- world intros
-    img = canvas(); forest_scene(img)
-    big_text(img, "MUNDO 1", 0, 14, 3, [10, 11, 12], center=True)
-    big_text(img, "BOSQUE", 0, 44, 5, [10, 11, 12], center=True)
-    save(img, pal(FOREST), 'bg_intro_bosque.png')
+    WORLD = ("MUNDO", "WORLD")
+    for k, (suf, _) in enumerate(variants(0, 1)):
+        w = WORLD[k]
+        img = canvas(); forest_scene(img)
+        big_text(img, w + " 1", 0, 14, 3, [10, 11, 12], center=True)
+        big_text(img, ("BOSQUE", "FOREST")[k], 0, 44, 5, [10, 11, 12], center=True)
+        save(img, pal(FOREST), f'bg_intro_bosque{suf}.png')
 
-    img = canvas(); volcano_scene(img)
-    big_text(img, "MUNDO 2", 0, 14, 3, [10, 11, 12], outline=14, center=True)
-    big_text(img, "VOLCAN", 0, 44, 5, [10, 11, 12], outline=14, center=True)
-    save(img, pal(VOLC, logo=[(60, 10, 10), (255, 240, 120), (255, 160, 40), (232, 64, 24)]), 'bg_intro_volcan.png')
+        img = canvas(); volcano_scene(img)
+        big_text(img, w + " 2", 0, 14, 3, [10, 11, 12], outline=14, center=True)
+        big_text(img, ("VOLCAN", "VOLCANO")[k], 0, 44, 5, [10, 11, 12], outline=14, center=True)
+        save(img, pal(VOLC, logo=[(60, 10, 10), (255, 240, 120), (255, 160, 40), (232, 64, 24)]), f'bg_intro_volcan{suf}.png')
 
-    img = canvas(); sea_scene(img)
-    big_text(img, "MUNDO 3", 0, 14, 3, [15, 11, 12], center=True)
-    big_text(img, "MAR", 0, 44, 5, [15, 11, 12], center=True)
-    save(img, pal(SEA, logo=[(16, 32, 80), (255, 140, 160), (180, 230, 255), (90, 180, 240)]), 'bg_intro_acuatico.png')
+        img = canvas(); sea_scene(img)
+        big_text(img, w + " 3", 0, 14, 3, [15, 11, 12], center=True)
+        big_text(img, ("MAR", "SEA")[k], 0, 44, 5, [15, 11, 12], center=True)
+        save(img, pal(SEA, logo=[(16, 32, 80), (255, 140, 160), (180, 230, 255), (90, 180, 240)]), f'bg_intro_acuatico{suf}.png')
 
-    img = canvas(); sky_scene(img)
-    big_text(img, "MUNDO 4", 0, 14, 3, [12, 10, 11], center=True)
-    big_text(img, "CIELO", 0, 44, 5, [12, 10, 11], center=True)
-    save(img, pal(SKY, logo=[(60, 40, 120), (255, 220, 100), (255, 180, 60), (255, 250, 220)]), 'bg_intro_celeste.png')
+        img = canvas(); sky_scene(img)
+        big_text(img, w + " 4", 0, 14, 3, [12, 10, 11], center=True)
+        big_text(img, ("CIELO", "SKY")[k], 0, 44, 5, [12, 10, 11], center=True)
+        save(img, pal(SKY, logo=[(60, 40, 120), (255, 220, 100), (255, 180, 60), (255, 250, 220)]), f'bg_intro_celeste{suf}.png')
 
     # ---------------- endings
     img = canvas(); night_scene(img)
@@ -328,20 +356,75 @@ def main():
     big_text(img, "CONTINUE?", 0, 40, 5, [10, 11, 12], center=True)
     save(img, pal(NIGHT, logo=GOLD), 'bg_continue.png')
 
-    img = canvas(); sky_scene(img)
-    big_text(img, "ENHORABUENA!", 0, 24, 4, [12, 10, 11], center=True)
-    small_text(img, "HAS SALVADO A TODOS LOS POLLUELOS", 0, 72, center=True)
-    save(img, pal(SKY, logo=[(60, 40, 120), (255, 220, 100), (255, 180, 60), (255, 250, 220)]), 'bg_fin_juego.png')
+    SKYLOGO = [(60, 40, 120), (255, 220, 100), (255, 180, 60), (255, 250, 220)]
+    for suf, (t, sub, sc) in variants(("ENHORABUENA!", "HAS SALVADO A TODOS LOS POLLUELOS", 4),
+                                     ("CONGRATULATIONS!", "YOU SAVED EVERY SINGLE CHICK", 3)):
+        img = canvas(); sky_scene(img)
+        big_text(img, t, 0, 24 + (4 if sc == 3 else 0), sc, [12, 10, 11], center=True)
+        small_text(img, sub, 0, 72, center=True)
+        save(img, pal(SKY, logo=SKYLOGO), f'bg_fin_juego{suf}.png')
 
-    img = canvas(); forest_scene(img)
-    big_text(img, "GANA EL", 0, 16, 3, [10, 11, 12], center=True)
-    big_text(img, "PAJARO!", 0, 44, 5, [10, 11, 12], center=True)
-    save(img, pal(FOREST), 'bg_pajaro_ganador.png')
+    for suf, (a, b) in variants(("GANA EL", "PAJARO!"), ("THE BIRD", "WINS!")):
+        img = canvas(); forest_scene(img)
+        big_text(img, a, 0, 16, 3, [10, 11, 12], center=True)
+        big_text(img, b, 0, 44, 5, [10, 11, 12], center=True)
+        save(img, pal(FOREST), f'bg_pajaro_ganador{suf}.png')
+    for suf, (a, b) in variants(("GANA EL", "CAZADOR!"), ("THE HUNTER", "WINS!")):
+        img = canvas(); night_scene(img)
+        big_text(img, a, 0, 16, 3, [10, 11, 12], center=True)
+        big_text(img, b, 0, 44, 5, [10, 11, 12], center=True)
+        save(img, pal(NIGHT, logo=[(60, 10, 20), (255, 200, 120), (232, 120, 48), (160, 60, 30)]), f'bg_cazador_ganador{suf}.png')
 
-    img = canvas(); night_scene(img)
-    big_text(img, "GANA EL", 0, 16, 3, [10, 11, 12], center=True)
-    big_text(img, "CAZADOR!", 0, 44, 5, [10, 11, 12], center=True)
-    save(img, pal(NIGHT, logo=[(60, 10, 20), (255, 200, 120), (232, 120, 48), (160, 60, 30)]), 'bg_cazador_ganador.png')
+    # ---------------- arcade story (text is drawn by the game inside the bottom panel)
+    img = canvas(); forest_scene(img, ground_y=168)
+    nest(img, 160, 160)
+    story_panel(img)
+    save(img, pal(FOREST), 'bg_hist1.png')
+
+    img = canvas(); night_scene(img, ground_y=168)
+    nest(img, 160, 160, weave=(11, 12), dark=9, egg=15)
+    story_panel(img)
+    save(img, pal(NIGHT, logo=[(80, 50, 30), (255, 230, 150), (150, 100, 60), (110, 70, 40)]), 'bg_hist2.png')
+
+    MAP = [(236, 214, 160), (214, 186, 128), (160, 200, 240), (60, 110, 200), (200, 60, 40), (40, 110, 60),
+           (90, 170, 70), (150, 140, 130)]
+    img = canvas(1)
+    for y in range(H):
+        for x in range(W):
+            if hsh(x // 3, y // 3, 17) % 100 < 22: img[y, x] = 2
+    rect(img, 6, 6, W - 6, 8, 9); rect(img, 6, 164, W - 6, 166, 9); rect(img, 6, 6, 8, 166, 9); rect(img, W - 8, 6, W - 6, 166, 9)
+    # dotted path linking the four worlds
+    pts = [(54, 120), (130, 64), (200, 118), (270, 58)]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        for k in range(0, 40):
+            if k % 3 == 0: continue
+            t = k / 40.0
+            x = int(x0 + (x1 - x0) * t); y = int(y0 + (y1 - y0) * t - 18 * math.sin(math.pi * t))
+            rect(img, x, y, x + 2, y + 2, 9)
+    # forest: three trees
+    for dx in (-14, 0, 14):
+        rect(img, 54 + dx - 1, 124, 54 + dx + 2, 134, 9)
+        disc(img, 54 + dx, 116, 9, 6); disc(img, 52 + dx, 113, 5, 7)
+    # volcano
+    silhouette_pts = [(x, 74 - max(0, 22 - abs(x - 130))) for x in range(100, 161)]
+    for x, top in silhouette_pts:
+        rect(img, x, top + 18, x + 1, 86, 8)
+    disc(img, 130, 54, 5, 12); disc(img, 126, 46, 4, 11); rect(img, 128, 60, 132, 76, 5)
+    # sea: waves
+    for k in range(3):
+        for x in range(176, 226):
+            y = 112 + k * 7 + int(2 * math.sin((x + k * 4) / 3.0))
+            rect(img, x, y, x + 1, y + 2, 4 if k % 2 == 0 else 3)
+    # sky: cloud
+    disc(img, 262, 58, 10, 15); disc(img, 276, 60, 8, 15); disc(img, 250, 62, 7, 15)
+    rect(img, 246, 62, 284, 68, 15); rect(img, 246, 68, 284, 69, 3)
+    big_text(img, "?", 0, 26, 3, [10, 11, 12], center=True) if False else None
+    story_panel(img)
+    save(img, pal(MAP, logo=[(90, 50, 20), (255, 230, 120), (255, 160, 60), (232, 96, 32)]), 'bg_hist3.png')
+
+    img = canvas(); sky_scene(img, ground_y=150)
+    story_panel(img)
+    save(img, pal(SKY, logo=SKYLOGO), 'bg_hist4.png')
     print('screens written to', OUT)
 
 if __name__ == '__main__':

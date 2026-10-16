@@ -43,6 +43,13 @@
 #define ESTADO_FINJUEGO    5
 #define ESTADO_CONTINUE    6
 #define ESTADO_INTRO       7
+#define ESTADO_IDIOMA      10
+#define ESTADO_HISTORIA    11
+
+// ---- Idioma: 0 = castellano, 1 = inglés ----
+u16 idioma = 0;
+#define T(es, en) (idioma ? (en) : (es))
+#define IMG(nombre) (idioma ? &nombre##_en : &nombre)
 
 // --- DEFINICIONES DE MUNDOS ---
 #define MUNDO_BOSQUE  0
@@ -273,6 +280,12 @@ void leer_entrada();
 void actualizar_logica();
 void efecto_chispa(s16 x, s16 y);
 void pantalla_sprites_reset();
+void guardar_config();
+void cargar_config();
+void mostrar_idioma();
+void mostrar_historia();
+void historia_actualizar();
+void preparados();
 Sprite* pantalla_sprite(const SpriteDefinition* def, s16 x, s16 y, u16 pal, u16 anim, s16 vx, bool flip);
 extern bool titulo_parpadeo;
 void pantalla_actualizar();
@@ -458,7 +471,7 @@ void hud_actualizar() {
     } else {
         if (redibujo_total) {
             if (modo_juego_seleccionada == 0) { sprintf(buf, "%d-%d", mundo_actual + 1, fase_actual); hud_texto(buf, 1); }
-            else hud_texto("LIBRE", 1);
+            else hud_texto(T("LIBRE", "FREE"), 1);
             hud_texto("SCORE", 7); hud_texto("TIME", 20);
             hud_icono(0, 29);   // polluelo
             hud_icono(4, 36);   // cabeza del protagonista
@@ -476,7 +489,7 @@ void hud_actualizar() {
         u16 huevos = total_salvados * 100 + max_polluelos_nivel;
         if (hud_cache_huevos != huevos || hud_cache_parpadeo != parpadeo) {
             hud_cache_huevos = huevos; hud_cache_parpadeo = parpadeo;
-            if (salida_abierta && parpadeo) hud_texto("META!", 31);
+            if (salida_abierta && parpadeo) hud_texto(T("META!", "GOAL!"), 31);
             else { sprintf(buf, "%02d/%02d", total_salvados, max_polluelos_nivel); hud_texto(buf, 31); }
         }
         if (hud_cache_vidas != (u16)continues_restantes) {
@@ -565,16 +578,40 @@ int main(bool hard) {
 
     color_muro_original = pal_bosque_maze.data[1];
 
-    estado_actual = ESTADO_TITULO;
-    mostrar_pantalla_titulo();
+    cargar_config();
+    estado_actual = ESTADO_IDIOMA;
+    mostrar_idioma();
 
     while(1) {
         u16 joy = JOY_readJoypad(JOY_1);
         static bool boton_pulsado = FALSE;
 
 
-        if (estado_actual == ESTADO_TITULO) {
-            if (joy & BUTTON_START) {
+        static u16 titulo_espera = 0;
+        if (estado_actual == ESTADO_IDIOMA) {
+            if (!boton_pulsado) {
+                if ((joy & (BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT))) {
+                    idioma ^= 1; playMenuClickSound(); mostrar_idioma(); boton_pulsado = TRUE;
+                } else if (joy & (BUTTON_START | BUTTON_A | BUTTON_C)) {
+                    playMenuClickSound(); guardar_config();
+                    estado_actual = ESTADO_HISTORIA; mostrar_historia(); boton_pulsado = TRUE;
+                }
+            }
+            if (!(joy & (BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT | BUTTON_A | BUTTON_C | BUTTON_START))) boton_pulsado = FALSE;
+        }
+        else if (estado_actual == ESTADO_HISTORIA) {
+            historia_actualizar();      // START la salta; al terminar pasa al título
+            if (estado_actual == ESTADO_HISTORIA && !boton_pulsado && (joy & BUTTON_START)) {
+                estado_actual = ESTADO_TITULO; titulo_espera = 0; mostrar_pantalla_titulo(); boton_pulsado = TRUE;
+            }
+            if (!(joy & BUTTON_START)) boton_pulsado = FALSE;
+        }
+        else if (estado_actual == ESTADO_TITULO) {
+            // modo "attract": si nadie toca el mando, vuelve a contar la historia
+            if (joy) titulo_espera = 0;
+            else if (++titulo_espera > 1500) { titulo_espera = 0; estado_actual = ESTADO_HISTORIA; mostrar_historia(); }
+            if (boton_pulsado) { if (!(joy & BUTTON_START)) boton_pulsado = FALSE; }
+            else if (joy & BUTTON_START) {
                 playMenuClickSound();
                 estado_actual = ESTADO_MENU;
                 musica_segun_estado(ESTADO_MENU);
@@ -594,6 +631,7 @@ int main(bool hard) {
                 else if (joy & BUTTON_B) { if (modo_juego_seleccionada != 1) { modo_juego_seleccionada = 1; playMenuClickSound(); mostrar_menu_opciones(); } boton_pulsado = TRUE; }
                 
                 else if (joy & BUTTON_C) { modo_battle_royale = !modo_battle_royale; playMenuClickSound(); mostrar_menu_opciones(); boton_pulsado = TRUE; }
+                else if (joy & BUTTON_MODE) { idioma ^= 1; guardar_config(); playMenuClickSound(); pantalla_olvidar_imagen(); mostrar_menu_opciones(); boton_pulsado = TRUE; }
                 
                 else if (joy & BUTTON_START) {
                     total_partidas++;
@@ -624,7 +662,7 @@ int main(bool hard) {
                     waitMs(200);
                 }
             }
-            if (!(joy & (BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT | BUTTON_A | BUTTON_B | BUTTON_C | BUTTON_START))) { boton_pulsado = FALSE; }
+            if (!(joy & (BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT | BUTTON_A | BUTTON_B | BUTTON_C | BUTTON_START | BUTTON_MODE))) { boton_pulsado = FALSE; }
         }
         else if (estado_actual == ESTADO_MENU_VERSUS) {
             if (!boton_pulsado) {
@@ -749,7 +787,7 @@ int main(bool hard) {
                 playMenuClickSound();
                 juego_pausado = !juego_pausado;
                 if (juego_pausado) {
-                    hud_mensaje("PAUSA");
+                    hud_mensaje(T("PAUSA", "PAUSE"));
                     musica_pausar();
                 } else {
                     hud_forzar_redibujo();
@@ -824,33 +862,33 @@ static void menu_opcion(const char* txt, u16 x, u16 y, bool sel) {
 
 void mostrar_menu_opciones() {
     char buf[40];
-    pantalla_imagen(&bg_opciones);
+    pantalla_imagen(IMG(bg_opciones));
     VDP_loadFont(&ts_font_menu, DMA);          // fuente con fondo del color del panel
-    menu_paletas(&bg_opciones);
+    menu_paletas(IMG(bg_opciones));
     musica_segun_estado(ESTADO_MENU);
 
-    sprintf(buf, "PARTIDAS %-5ld   RECORD %06ld", total_partidas, puntuacion_maxima);
+    sprintf(buf, T("PARTIDAS %-5ld   RECORD %06ld", "GAMES %-5ld      RECORD %06ld"), total_partidas, puntuacion_maxima);
     menu_texto(buf, 3, 6, PAL3);
-    sprintf(buf, "VICTORIAS  PAJARO %ld  CAZADOR %ld", victorias_pajaro, victorias_cazador);
+    sprintf(buf, T("VICTORIAS  PAJARO %ld  CAZADOR %ld", "WINS       BIRD %ld  HUNTER %ld"), victorias_pajaro, victorias_cazador);
     menu_texto(buf, 3, 7, PAL3);
 
-    menu_texto("JUGADORES", 3, 9, PAL1);           menu_texto("IZQ/DER", 30, 9, PAL3);
-    menu_opcion("1 JUGADOR CONTRA LA CPU", 4, 10, modo_jugadores == 0);
-    menu_opcion("2 JUGADORES", 4, 11, modo_jugadores == 1);
+    menu_texto(T("JUGADORES", "PLAYERS"), 3, 9, PAL1);           menu_texto(T("IZQ/DER", "LEFT/RIGHT"), T(30, 27), 9, PAL3);
+    menu_opcion(T("1 JUGADOR CONTRA LA CPU", "1 PLAYER VS THE CPU"), 4, 10, modo_jugadores == 0);
+    menu_opcion(T("2 JUGADORES", "2 PLAYERS"), 4, 11, modo_jugadores == 1);
 
-    menu_texto("MODO", 3, 13, PAL1);                menu_texto("A / B", 32, 13, PAL3);
-    menu_opcion("HISTORIA  4 MUNDOS x 5 FASES", 4, 14, modo_juego_seleccionada == 0);
-    menu_opcion("LIBRE     UN MAPA AL AZAR", 4, 15, modo_juego_seleccionada == 1);
+    menu_texto(T("MODO", "MODE"), 3, 13, PAL1);                menu_texto("A / B", 32, 13, PAL3);
+    menu_opcion(T("HISTORIA  4 MUNDOS x 5 FASES", "STORY     4 WORLDS x 5 STAGES"), 4, 14, modo_juego_seleccionada == 0);
+    menu_opcion(T("LIBRE     UN MAPA AL AZAR", "FREE      ONE RANDOM MAZE"), 4, 15, modo_juego_seleccionada == 1);
 
     menu_texto("BATTLE ROYALE", 3, 17, PAL1);       menu_texto("C", 36, 17, PAL3);
-    menu_opcion(modo_battle_royale ? "ACTIVADO" : "DESACTIVADO", 4, 18, TRUE);
+    menu_opcion(modo_battle_royale ? T("ACTIVADO", "ON") : T("DESACTIVADO", "OFF"), 4, 18, TRUE);
 
-    menu_texto("DIFICULTAD", 3, 20, PAL1);          menu_texto("ARR/ABA", 30, 20, PAL3);
-    menu_opcion("FACIL    2 MIN   5 POLLUELOS", 4, 21, d_sel == 0);
-    menu_opcion("MEDIO    3 MIN  10 POLLUELOS", 4, 22, d_sel == 1);
-    menu_opcion("DIFICIL  5 MIN  15 POLLUELOS", 4, 23, d_sel == 2);
+    menu_texto(T("DIFICULTAD", "DIFFICULTY"), 3, 20, PAL1);          menu_texto(T("ARR/ABA", "UP/DOWN"), 30, 20, PAL3);
+    menu_opcion(T("FACIL    2 MIN   5 POLLUELOS", "EASY     2 MIN   5 CHICKS"), 4, 21, d_sel == 0);
+    menu_opcion(T("MEDIO    3 MIN  10 POLLUELOS", "NORMAL   3 MIN  10 CHICKS"), 4, 22, d_sel == 1);
+    menu_opcion(T("DIFICIL  5 MIN  15 POLLUELOS", "HARD     5 MIN  15 CHICKS"), 4, 23, d_sel == 2);
 
-    menu_texto("PULSA START PARA JUGAR", 9, 25, PAL1);
+    menu_texto(T("START: JUGAR    MODE: IDIOMA", "START: PLAY    MODE: LANGUAGE"), T(7, 6), 25, PAL1);
 }
 
 static void icono_item(u16 base, u16 item, u16 col, u16 fila) {
@@ -862,33 +900,33 @@ static void icono_item(u16 base, u16 item, u16 col, u16 fila) {
 }
 
 void mostrar_pantalla_como_jugar() {
-    pantalla_imagen(&bg_como_jugar);
+    pantalla_imagen(IMG(bg_como_jugar));
     VDP_loadFont(&ts_font_menu, DMA);
-    menu_paletas(&bg_como_jugar);
+    menu_paletas(IMG(bg_como_jugar));
     PAL_setPalette(PAL2, pal_items.data, CPU);
     // iconos de los objetos (mismos tiles que en el juego), justo detrás de la imagen
-    u16 base = TILE_USER_INDEX + bg_como_jugar.tileset->numTile;
+    u16 base = TILE_USER_INDEX + IMG(bg_como_jugar)->tileset->numTile;
     VDP_loadTileSet(&ts_items, base, DMA);
 
     icono_item(base, 0, 2, 6);
-    menu_texto("RECOGE LOS POLLUELOS Y LLEVALOS", 5, 6, PAL0);
-    menu_texto("AL NIDO DEL CENTRO DEL LABERINTO.", 5, 7, PAL0);
+    menu_texto(T("RECOGE LOS POLLUELOS Y LLEVALOS", "PICK UP THE CHICKS AND BRING"), 5, 6, PAL0);
+    menu_texto(T("AL NIDO DEL CENTRO DEL LABERINTO.", "THEM TO THE NEST IN THE MIDDLE."), 5, 7, PAL0);
     PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
     pantalla_sprite(&hunter_sprite, 12, 70, PAL3, ANIM_ABAJO, 0, FALSE);
-    menu_texto("SI EL CAZADOR TE PILLA, TUS", 5, 9, PAL0);
-    menu_texto("POLLUELOS SE ESCAPAN. SIN NINGUNO", 5, 10, PAL0);
-    menu_texto("DETRAS, PIERDES LA PARTIDA.", 5, 11, PAL0);
+    menu_texto(T("SI EL CAZADOR TE PILLA, TUS", "IF THE HUNTER CATCHES YOU, YOUR"), 5, 9, PAL0);
+    menu_texto(T("POLLUELOS SE ESCAPAN. SIN NINGUNO", "CHICKS RUN AWAY. WITH NONE BEHIND"), 5, 10, PAL0);
+    menu_texto(T("DETRAS, PIERDES LA PARTIDA.", "YOU, YOU LOSE THE ROUND."), 5, 11, PAL0);
     icono_item(base, 1, 2, 13);
-    menu_texto("RELOJ: FRENA AL CAZADOR.", 5, 13, PAL1);
+    menu_texto(T("RELOJ: FRENA AL CAZADOR.", "CLOCK: SLOWS THE HUNTER DOWN."), 5, 13, PAL1);
     icono_item(base, 2, 2, 15);
-    menu_texto("RAYO: CORRES EL DOBLE.", 5, 15, PAL1);
+    menu_texto(T("RAYO: CORRES EL DOBLE.", "BOLT: YOU RUN TWICE AS FAST."), 5, 15, PAL1);
     icono_item(base, 3, 2, 17);
-    menu_texto("GEMA: 250 PUNTOS EXTRA.", 5, 17, PAL1);
-    menu_texto("SI LOS MUROS SE PONEN ROJOS, EL", 5, 19, PAL0);
-    menu_texto("CAZADOR ENTRA EN RABIA: HUYE!", 5, 20, PAL0);
-    menu_texto("CADA 2500 PUNTOS GANAS UN", 5, 22, PAL0);
-    menu_texto("CONTINUE EXTRA.", 5, 23, PAL0);
-    menu_texto("PULSA START", 14, 25, PAL1);
+    menu_texto(T("GEMA: 250 PUNTOS EXTRA.", "GEM: 250 BONUS POINTS."), 5, 17, PAL1);
+    menu_texto(T("SI LOS MUROS SE PONEN ROJOS, EL", "IF THE WALLS TURN RED, THE HUNTER"), 5, 19, PAL0);
+    menu_texto(T("CAZADOR ENTRA EN RABIA: HUYE!", "GOES BERSERK: RUN FOR IT!"), 5, 20, PAL0);
+    menu_texto(T("CADA 2500 PUNTOS GANAS UN", "EVERY 2500 POINTS YOU EARN AN"), 5, 22, PAL0);
+    menu_texto(T("CONTINUE EXTRA.", "EXTRA CONTINUE."), 5, 23, PAL0);
+    menu_texto(T("PULSA START", "PRESS START"), 14, 25, PAL1);
 }
 
 // ===== MENÚ VERSUS ACTUALIZADO CON SELECCIÓN DE ESCENARIO Y "VOLVER AL MENÚ" =====
@@ -898,39 +936,39 @@ void mostrar_menu_versus() {
     VDP_loadFont(&ts_font_menu, DMA);
     menu_paletas(&bg_versus);
 
-    menu_opcion(modo_battle_royale ? "BATTLE ROYALE      SI" : "BATTLE ROYALE      NO", 5, 7, versus_sel == 0);
+    menu_opcion(modo_battle_royale ? T("BATTLE ROYALE      SI", "BATTLE ROYALE      ON") : T("BATTLE ROYALE      NO", "BATTLE ROYALE      OFF"), 5, 7, versus_sel == 0);
 
     u16 segs = (versus_tiempo_idx == 0) ? 60 : ((versus_tiempo_idx == 1) ? 90 : ((versus_tiempo_idx == 2) ? 120 : 180));
-    sprintf(buf, "TIEMPO DE RONDA    %d SEG", segs);
+    sprintf(buf, T("TIEMPO DE RONDA    %d SEG", "ROUND TIME         %d SEC"), segs);
     menu_opcion(buf, 5, 10, versus_sel == 1);
 
-    sprintf(buf, "AL MEJOR DE        %d", versus_victorias_req);
+    sprintf(buf, T("AL MEJOR DE        %d", "BEST OF            %d"), versus_victorias_req);
     menu_opcion(buf, 5, 13, versus_sel == 2);
 
     const char* nombre_mundo;
     switch (versus_mundo_idx) {
-        case 0: nombre_mundo = "BOSQUE"; break;
-        case 1: nombre_mundo = "VOLCAN"; break;
-        case 2: nombre_mundo = "MAR"; break;
-        case 3: nombre_mundo = "CIELO"; break;
-        default: nombre_mundo = "AL AZAR"; break;
+        case 0: nombre_mundo = T("BOSQUE", "FOREST"); break;
+        case 1: nombre_mundo = T("VOLCAN", "VOLCANO"); break;
+        case 2: nombre_mundo = T("MAR", "SEA"); break;
+        case 3: nombre_mundo = T("CIELO", "SKY"); break;
+        default: nombre_mundo = T("AL AZAR", "RANDOM"); break;
     }
-    sprintf(buf, "ESCENARIO          %s", nombre_mundo);
+    sprintf(buf, T("ESCENARIO          %s", "STAGE              %s"), nombre_mundo);
     menu_opcion(buf, 5, 16, versus_sel == 3);
 
-    menu_opcion("VOLVER AL MENU", 5, 19, versus_sel == 4);
+    menu_opcion(T("VOLVER AL MENU", "BACK TO MENU"), 5, 19, versus_sel == 4);
 
-    menu_texto("MANDO 1: PAJARO", 5, 22, PAL3);
-    menu_texto("MANDO 2: CAZADOR", 5, 23, PAL3);
-    menu_texto("PULSA START PARA EMPEZAR", 8, 25, PAL1);
+    menu_texto(T("MANDO 1: PAJARO", "PAD 1: BIRD"), 5, 22, PAL3);
+    menu_texto(T("MANDO 2: CAZADOR", "PAD 2: HUNTER"), 5, 23, PAL3);
+    menu_texto(T("PULSA START PARA EMPEZAR", "PRESS START TO BEGIN"), T(8, 10), 25, PAL1);
 }
 
 void mostrar_intro_mundo_actual() {
-    const Image* img = &bg_intro_bosque;
+    const Image* img = IMG(bg_intro_bosque);
     const SpriteDefinition* enemigo = &hunter_sprite;
-    if (mundo_actual == MUNDO_VOLCAN)       { img = &bg_intro_volcan;    enemigo = &flame_sprite; }
-    else if (mundo_actual == MUNDO_MARINO)  { img = &bg_intro_acuatico;  enemigo = &shark_sprite; }
-    else if (mundo_actual == MUNDO_CELESTE) { img = &bg_intro_celeste;   enemigo = &imp_sprite; }
+    if (mundo_actual == MUNDO_VOLCAN)       { img = IMG(bg_intro_volcan);    enemigo = &flame_sprite; }
+    else if (mundo_actual == MUNDO_MARINO)  { img = IMG(bg_intro_acuatico);  enemigo = &shark_sprite; }
+    else if (mundo_actual == MUNDO_CELESTE) { img = IMG(bg_intro_celeste);   enemigo = &imp_sprite; }
     pantalla_imagen(img);
     VDP_loadFont(&ts_font, DMA);
     VDP_setTextPalette(PAL0);
@@ -1009,6 +1047,7 @@ void inicializar_juego() {
     cazador.sprite = SPR_addSprite(cazador_recurso, cazador.x - CAZADOR_DRAW_OFFSET, cazador.y + PLAY_Y - CAZADOR_DRAW_OFFSET_Y, TILE_ATTR(PAL3, 0, FALSE, FALSE));
 
     musica_segun_estado(ESTADO_JUEGO);
+    preparados();
 }
 
 void lauch_partida() {} 
@@ -1060,7 +1099,7 @@ void mostrar_pantalla_continue() {
     VDP_setTextPalette(PAL0);
     PAL_setPalette(PAL2, pal_items.data, CPU);
     char buf[40];
-    sprintf(buf, "TE QUEDAN %d CONTINUES", continues_restantes);
+    sprintf(buf, T("TE QUEDAN %d CONTINUES", "%d CONTINUES LEFT"), continues_restantes);
     texto_centrado(buf, 12);
     pantalla_sprite(&hero_sprite, 152, 160, PAL2, ANIM_HERIDO, 0, FALSE);
     titulo_parpadeo = TRUE;
@@ -1069,6 +1108,7 @@ void mostrar_pantalla_continue() {
 void mostrar_game_over() {
     if (flicky.puntuacion > puntuacion_maxima) {
         puntuacion_maxima = flicky.puntuacion;
+        guardar_config();
     }
     finalizar_partida();
     estado_actual = ESTADO_GAMEOVER;
@@ -1081,7 +1121,7 @@ void mostrar_game_over() {
     PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
     {
         char buf[40];
-        sprintf(buf, "PUNTOS %06ld   RECORD %06ld", flicky.puntuacion, puntuacion_maxima);
+        sprintf(buf, T("PUNTOS %06ld   RECORD %06ld", "SCORE %06ld   RECORD %06ld"), flicky.puntuacion, puntuacion_maxima);
         texto_centrado(buf, 12);
     }
     pantalla_sprite(&hunter_sprite, 176, 152, PAL3, ANIM_LADO, 0, TRUE);
@@ -1095,6 +1135,7 @@ void mostrar_game_over() {
 void mostrar_enhorabuena() {
     if (flicky.puntuacion > puntuacion_maxima) {
         puntuacion_maxima = flicky.puntuacion;
+        guardar_config();
     }
     finalizar_partida();
     estado_actual = ESTADO_FINJUEGO;
@@ -1102,13 +1143,13 @@ void mostrar_enhorabuena() {
     VDP_clearPlane(BG_B, TRUE);
 
 
-    pantalla_imagen(&bg_fin_juego);
+    pantalla_imagen(IMG(bg_fin_juego));
     VDP_loadFont(&ts_font, DMA);
     VDP_setTextPalette(PAL0);
     PAL_setPalette(PAL2, pal_items.data, CPU);
     {
         char buf[40];
-        sprintf(buf, "PUNTOS %06ld", flicky.puntuacion);
+        sprintf(buf, T("PUNTOS %06ld", "SCORE %06ld"), flicky.puntuacion);
         texto_centrado(buf, 15);
     }
     pantalla_sprite(&hero_sprite, 152, 150, PAL2, ANIM_FELIZ, 0, FALSE);
@@ -1136,10 +1177,10 @@ void verificar_fin_ronda_versus(bool gano_pajaro) {
 
         PAL_setPalette(PAL2, pal_items.data, CPU);
         if (victorias_pajaro >= versus_victorias_req) {
-            pantalla_imagen(&bg_pajaro_ganador);
+            pantalla_imagen(IMG(bg_pajaro_ganador));
             pantalla_sprite(&hero_sprite, 152, 150, PAL2, ANIM_FELIZ, 0, FALSE);
         } else {
-            pantalla_imagen(&bg_cazador_ganador);
+            pantalla_imagen(IMG(bg_cazador_ganador));
             PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
             pantalla_sprite(&hunter_sprite, 148, 144, PAL3, ANIM_ABAJO, 0, FALSE);
         }
@@ -1147,7 +1188,7 @@ void verificar_fin_ronda_versus(bool gano_pajaro) {
         VDP_setTextPalette(PAL0);
         {
             char buf[40];
-            sprintf(buf, "PAJARO %ld  -  %ld CAZADOR", victorias_pajaro, victorias_cazador);
+            sprintf(buf, T("PAJARO %ld  -  %ld CAZADOR", "BIRD %ld  -  %ld HUNTER"), victorias_pajaro, victorias_cazador);
             texto_centrado(buf, 12);
         }
         titulo_parpadeo = TRUE;
@@ -1620,7 +1661,7 @@ void actualizar_logica() {
                 victorias_pajaro++;
                 muros_alerta(FALSE);
                 cazador_en_furia = FALSE; timer_cazador_lento = 0; cazador_tinte_actualizar();
-                banner("FASE SUPERADA!");
+                banner(T("FASE SUPERADA!", "STAGE CLEAR!"));
                 musica_detener(); XGM2_playTrack(PISTA_SUPERADA);
                 secuencia_heroe(ANIM_FELIZ, 150, TRUE);
                 if (modo_juego_seleccionada == 0) { 
@@ -1649,7 +1690,7 @@ void actualizar_logica() {
                     }
                 } else { 
                     estado_actual = ESTADO_VICTORIA;
-                    banner("HAS ESCAPADO CON EXITO!");
+                    banner(T("HAS ESCAPADO CON EXITO!", "YOU ESCAPED!"));
                     musica_detener(); XGM2_playTrack(PISTA_SUPERADA);
                     for (u16 f = 0; f < 150; f++) { SPR_update(); SYS_doVBlankProcess(); }
                     finalizar_partida();
@@ -1692,7 +1733,7 @@ void actualizar_logica() {
             reproducir_sonido_panico();
             victorias_cazador++;
             muros_alerta(TRUE);
-            banner("LA RABIA TE DESTRUYO!");
+            banner(T("LA RABIA TE DESTRUYO!", "THE HUNTER WENT BERSERK!"));
             musica_detener();
             sonido_atrapado();
             SPR_setAnim(flicky.sprite, ANIM_HERIDO); flicky.anim_actual = ANIM_HERIDO; SPR_setHFlip(flicky.sprite, FALSE);
@@ -1728,7 +1769,7 @@ void actualizar_logica() {
             reproducir_sonido_panico();
             victorias_cazador++;
             muros_alerta(FALSE);
-            banner("EL CAZADOR TE ATRAPO!");
+            banner(T("EL CAZADOR TE ATRAPO!", "THE HUNTER CAUGHT YOU!"));
             musica_detener();
             sonido_atrapado();
             SPR_setAnim(flicky.sprite, ANIM_HERIDO); flicky.anim_actual = ANIM_HERIDO; SPR_setHFlip(flicky.sprite, FALSE);
@@ -2008,7 +2049,122 @@ void pantalla_actualizar() {
     if (titulo_parpadeo && (estado_actual == ESTADO_TITULO || estado_actual == ESTADO_INTRO ||
                             estado_actual == ESTADO_CONTINUE || estado_actual == ESTADO_GAMEOVER || estado_actual == ESTADO_FINJUEGO)) {
         u16 fila = (estado_actual == ESTADO_TITULO) ? 17 : 24;
-        if ((t & 31) == 0) texto_centrado("PULSA START", fila);
+        if ((t & 31) == 0) texto_centrado(T("PULSA START", "PRESS START"), fila);
         else if ((t & 31) == 20) VDP_clearText(14, fila, 12);
     }
+}
+
+// ================= AJUSTES FINALES: IDIOMA, HISTORIA, "PREPARADOS" Y GUARDADO =================
+
+// --- Configuración en la SRAM del cartucho: idioma y récord ---
+#define SRAM_MAGIA 0xF1
+void cargar_config() {
+    SRAM_enableRO();
+    if (SRAM_readByte(0) == SRAM_MAGIA) {
+        idioma = SRAM_readByte(1) & 1;
+        puntuacion_maxima = SRAM_readLong(2);
+        if (puntuacion_maxima > 999999) puntuacion_maxima = 0;
+    }
+    SRAM_disable();
+}
+void guardar_config() {
+    SRAM_enable();
+    SRAM_writeByte(0, SRAM_MAGIA);
+    SRAM_writeByte(1, (u8)idioma);
+    SRAM_writeLong(2, puntuacion_maxima);
+    SRAM_disable();
+}
+
+// --- Selección de idioma ---
+void mostrar_idioma() {
+    pantalla_imagen(&bg_idioma);
+    VDP_loadFont(&ts_font_menu, DMA);
+    menu_paletas(&bg_idioma);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    menu_texto("IDIOMA / LANGUAGE", 11, 12, PAL1);
+    menu_opcion("CASTELLANO", 13, 15, idioma == 0);
+    menu_opcion("ENGLISH", 13, 17, idioma == 1);
+    pantalla_sprite(&hero_sprite, 152, 160, PAL2, ANIM_ABAJO, 0, FALSE);
+    musica_segun_estado(ESTADO_MENU);
+}
+
+// --- Historia tipo arcade: 4 viñetas con texto que se escribe solo ---
+static const char* const historia_es[4][2] = {
+    { "EN LO MAS PROFUNDO DEL BOSQUE, FLICKI", "CUIDABA DE SUS POLLUELOS EN EL NIDO." },
+    { "PERO UNA NOCHE LLEGO EL CAZADOR...",    "Y LOS POLLUELOS HUYERON ASUSTADOS!" },
+    { "AHORA ESTAN PERDIDOS POR BOSQUES,",     "VOLCANES, MARES Y CIELOS." },
+    { "AYUDA A FLICKI A LLEVARLOS A CASA",     "ANTES DE QUE EL CAZADOR LOS ATRAPE!" },
+};
+static const char* const historia_en[4][2] = {
+    { "DEEP IN THE FOREST, FLICKI LOOKED",     "AFTER HER LITTLE CHICKS IN THE NEST." },
+    { "BUT ONE NIGHT THE HUNTER CAME...",      "AND THE CHICKS FLED IN FRIGHT!" },
+    { "NOW THEY ARE LOST IN FORESTS,",         "VOLCANOES, SEAS AND SKIES." },
+    { "HELP FLICKI BRING THEM HOME",           "BEFORE THE HUNTER CATCHES THEM!" },
+};
+static u16 hist_panel, hist_t;
+
+static void historia_vineta(u16 n) {
+    static const Image* const fondos[4] = { &bg_hist1, &bg_hist2, &bg_hist3, &bg_hist4 };
+    hist_panel = n; hist_t = 0;
+    pantalla_imagen(fondos[n]);
+    VDP_loadFont(&ts_font_menu, DMA);
+    VDP_setTextPalette(PAL0);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
+    switch (n) {
+        case 0:   // Flicki feliz junto al nido con sus polluelos
+            pantalla_sprite(&hero_sprite, 108, 138, PAL2, ANIM_FELIZ, 0, FALSE);
+            for (u16 i = 0; i < 3; i++) pantalla_sprite(&chick_sprite, 140 + i * 14, 140, PAL2, 0, 0, FALSE);
+            break;
+        case 1:   // llega el cazador y los polluelos salen corriendo
+            pantalla_sprite(&hunter_sprite, 330, 130, PAL3, ANIM_LADO, -1, TRUE);
+            for (u16 i = 0; i < 3; i++) pantalla_sprite(&chick_sprite, 140 + i * 14, 140, PAL2, 0, -2, FALSE);
+            pantalla_sprite(&hero_sprite, 108, 138, PAL2, ANIM_HERIDO, 0, FALSE);
+            break;
+        case 2:   // Flicki recorre el mapa de los cuatro mundos
+            pantalla_sprite(&hero_sprite, 40, 100, PAL2, ANIM_LADO, 1, FALSE);
+            break;
+        default:  // ¡a por ellos!
+            pantalla_sprite(&hero_sprite, 152, 120, PAL2, ANIM_FELIZ, 0, FALSE);
+            pantalla_sprite(&chick_sprite, 120, 126, PAL2, 0, 0, FALSE);
+            pantalla_sprite(&chick_sprite, 188, 126, PAL2, 0, 0, FALSE);
+            break;
+    }
+}
+
+void mostrar_historia() {
+    musica_detener();
+    XGM2_playTrack(PISTA_CONTINUAR);
+    historia_vineta(0);
+}
+
+void historia_actualizar() {
+    const char* const* lineas = idioma ? historia_en[hist_panel] : historia_es[hist_panel];
+    hist_t++;
+    // máquina de escribir: una letra cada 2 frames, primero una línea y luego la otra
+    u16 n0 = strlen(lineas[0]), n1 = strlen(lineas[1]);
+    u16 c = hist_t / 2;
+    if ((hist_t & 1) == 0 && c <= n0 + n1) {
+        char ch[2] = { 0, 0 };
+        if (c >= 1 && c <= n0) { ch[0] = lineas[0][c - 1]; VDP_drawText(ch, 2 + c - 1, 23); }
+        else if (c > n0) { ch[0] = lineas[1][c - n0 - 1]; VDP_drawText(ch, 2 + c - n0 - 1, 25); }
+        if (ch[0] != ' ' && ch[0] && (c & 3) == 0) SFX(sfx_click, SOUND_PCM_CH2, 0);
+    }
+    if (hist_t > (n0 + n1) * 2 + 200) {
+        if (hist_panel < 3) historia_vineta(hist_panel + 1);
+        else { estado_actual = ESTADO_TITULO; mostrar_pantalla_titulo(); }
+    }
+}
+
+// --- Pausa de "¡preparados!" al empezar cada ronda: el jugador ve el laberinto antes de que el cazador arranque ---
+void preparados() {
+    hud_actualizar();
+    banner(T("PREPARADOS...", "GET READY..."));
+    for (u16 f = 0; f < 100; f++) {
+        if (f == 70) { dibujar_mapa_completo(); banner(T("YA!", "GO!")); }
+        SPR_update();
+        SYS_doVBlankProcess();
+    }
+    dibujar_mapa_completo();
+    hud_forzar_redibujo();
 }

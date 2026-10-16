@@ -20,7 +20,7 @@ Programar para hardware de 1989 (procesador Motorola 68000) impone severas restr
 
 Este repositorio demuestra cómo una IA puede comprender arquitecturas de hardware retro y diseñar código optimizado en C bajo el kit **SGDK**:
 
-*   **Físicas de colisión por tiles:** Rutinas de colisión píxel a píxel adaptadas a rejillas de 8x8.
+*   **Físicas de colisión por tiles:** Rutinas de colisión píxel a píxel adaptadas a una rejilla de metatiles de 16x16.
 *   **Algoritmo BFS (Breadth-First Search):** Implementación de una búsqueda en anchura optimizada en memoria para que la CPU del cazador persiga al jugador de forma inteligente.
 *   **Generación Procedimental:** Creación aleatoria de mapas garantizando que todos los elementos sean alcanzables mediante análisis topológico en tiempo real.
 
@@ -28,7 +28,17 @@ Este repositorio demuestra cómo una IA puede comprender arquitecturas de hardwa
 
 ## 🎮 Características y Modos de Juego
 
-*   **Modo Historia:** 4 mundos temáticos (Bosque, Volcán, Escenario Marino y Celeste) con sus respectivos enemigos y paletas personalizadas.
+*   **Aspecto de 16 bits:**
+    *   Setos, rocas volcánicas, arrecifes y nubes con autotiles.
+    *   Personajes chibi originales con animación.
+    *   Título, menús, intros y finales en pixel art.
+*   **Intro tipo arcade:** una pequeña historia en cuatro viñetas que da contexto al juego. Se repite si dejas el título quieto.
+*   **Castellano e inglés:**
+    *   El idioma se elige al arrancar; también se cambia con MODE en el menú (mando de 6 botones).
+    *   El idioma y el récord se guardan en la SRAM del cartucho.
+*   **Música FM y efectos PCM** originales, con el driver XGM2 de SGDK.
+
+*   **Modo Historia:** 4 mundos temáticos (Bosque, Volcán, Mar y Cielo), cada uno con su escenario y su enemigo: cazador, llama, tiburón y diablillo.
 *   **Modo Libre:** Generación procedural de laberintos jugables sobre la marcha.
 *   **Modo Versus (2 Jugadores):** Acción multijugador local en el que el segundo jugador controla directamente al cazador.
 *   **Mecánica de Dispersión:** Al recibir un golpe llevando polluelos, estos se esparcirán por el mapa y ganarás unos segundos de inmunidad para recuperarlos.
@@ -62,3 +72,16 @@ Ejecuta la herramienta de compilación de SGDK:
 %GDK%\bin\make -f %GDK%\makefile.gen
 ```
 Encontrarás la ROM final lista para emular en out/rom.bin.
+
+### Regenerar gráficos y sonido
+
+Todo el arte y el audio salen de scripts, así que se pueden retocar sin editores externos:
+
+```bash
+python3 tools/art/gen_assets.py      # laberintos, personajes, objetos, marcador y fuentes -> res/gen/
+python3 tools/art/screens.py         # título, menús, historia, intros y finales -> res/gfx/
+python3 tools/sound/samples.py       # batería y efectos de sonido -> res/snd/, tools/sound/pcm/
+MMLC=/ruta/a/mmlc tools/sound/build_music.sh   # música: compose.py -> MML -> VGM (ctrmml)
+```
+
+Si compilas con el `m68k-linux-gnu-gcc` de Linux en lugar del toolchain de SGDK, añade `-mstrict-align -fno-store-merging`. Sin esas opciones, GCC genera accesos de 16/32 bits a direcciones impares, que un 68000 real no admite.
