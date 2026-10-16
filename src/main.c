@@ -657,21 +657,27 @@ void dibujar_mapa_completo() {
 }
 
 void cargar_graficos_mundo() {
-    // De momento todos los mundos usan el tileset del bosque (fase 1 del rediseño)
-    pal_maze_actual = &pal_bosque_maze;
+    // Cada mundo tiene su tileset de muros/nido/marcador y su suelo (mismo nº de tiles en todos)
+    const TileSet* ts_maze = &ts_bosque_maze;   const TileSet* ts_floor = &ts_bosque_floor;
+    const Palette* p_maze  = &pal_bosque_maze;  const Palette* p_floor  = &pal_bosque_floor;
+    if (mundo_actual == MUNDO_VOLCAN)       { ts_maze = &ts_volcan_maze;  ts_floor = &ts_volcan_floor;  p_maze = &pal_volcan_maze;  p_floor = &pal_volcan_floor; }
+    else if (mundo_actual == MUNDO_MARINO)  { ts_maze = &ts_marino_maze;  ts_floor = &ts_marino_floor;  p_maze = &pal_marino_maze;  p_floor = &pal_marino_floor; }
+    else if (mundo_actual == MUNDO_CELESTE) { ts_maze = &ts_celeste_maze; ts_floor = &ts_celeste_floor; p_maze = &pal_celeste_maze; p_floor = &pal_celeste_floor; }
+
+    pal_maze_actual = p_maze;
     base_maze  = TILE_USER_INDEX;
-    base_floor = base_maze + ts_bosque_maze.numTile;
-    base_items = base_floor + ts_bosque_floor.numTile;
+    base_floor = base_maze + ts_maze->numTile;
+    base_items = base_floor + ts_floor->numTile;
     base_hud   = base_items + ts_items.numTile;
-    VDP_loadTileSet(&ts_bosque_maze, base_maze, DMA);
-    VDP_loadTileSet(&ts_bosque_floor, base_floor, DMA);
+    VDP_loadTileSet(ts_maze, base_maze, DMA);
+    VDP_loadTileSet(ts_floor, base_floor, DMA);
     VDP_loadTileSet(&ts_items, base_items, DMA);
     VDP_loadTileSet(&ts_hud, base_hud, DMA);
     VDP_loadFont(&ts_font, DMA);
-    PAL_setPalette(PAL0, pal_bosque_maze.data, CPU);
-    PAL_setPalette(PAL1, pal_bosque_floor.data, CPU);
+    PAL_setPalette(PAL0, p_maze->data, CPU);
+    PAL_setPalette(PAL1, p_floor->data, CPU);
     PAL_setPalette(PAL2, pal_items.data, CPU);
-    color_muro_original = pal_bosque_maze.data[1];
+    color_muro_original = p_maze->data[1];
     VDP_setTextPalette(PAL0);
 }
 
@@ -1218,11 +1224,11 @@ void inicializar_juego() {
 
     const SpriteDefinition* cazador_recurso = &hunter_sprite;
     if (mundo_actual == MUNDO_VOLCAN) {
-        cazador_recurso = &sprites_llama;
+        cazador_recurso = &flame_sprite;
     } else if (mundo_actual == MUNDO_MARINO) {
-        cazador_recurso = &sprites_tiburon;
+        cazador_recurso = &shark_sprite;
     } else if (mundo_actual == MUNDO_CELESTE) {
-        cazador_recurso = &sprites_demonio;
+        cazador_recurso = &imp_sprite;
     }
     PAL_setPalette(PAL3, cazador_recurso->palette->data, CPU);
 

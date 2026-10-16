@@ -37,3 +37,18 @@ SPRITE hunter_sprite "gen/hunter.png" 3 3 FAST 0
 TILESET ts_chick_anim "gen/chick_tiles.png" NONE NONE
 SPRITE spark_sprite "gen/spark.png" 2 2 FAST 4
 TILESET ts_font_menu "gen/font_menu.png" NONE NONE
+PALETTE pal_volcan_maze "gen/volcan_maze.png"
+TILESET ts_volcan_maze "gen/volcan_maze.png" NONE NONE
+PALETTE pal_volcan_floor "gen/volcan_floor.png"
+TILESET ts_volcan_floor "gen/volcan_floor.png" NONE NONE
+PALETTE pal_marino_maze "gen/marino_maze.png"
+TILESET ts_marino_maze "gen/marino_maze.png" NONE NONE
+PALETTE pal_marino_floor "gen/marino_floor.png"
+TILESET ts_marino_floor "gen/marino_floor.png" NONE NONE
+PALETTE pal_celeste_maze "gen/celeste_maze.png"
+TILESET ts_celeste_maze "gen/celeste_maze.png" NONE NONE
+PALETTE pal_celeste_floor "gen/celeste_floor.png"
+TILESET ts_celeste_floor "gen/celeste_floor.png" NONE NONE
+SPRITE flame_sprite "gen/flame.png" 3 3 FAST 0
+SPRITE shark_sprite "gen/shark.png" 3 3 FAST 0
+SPRITE imp_sprite "gen/imp.png" 3 3 FAST 0

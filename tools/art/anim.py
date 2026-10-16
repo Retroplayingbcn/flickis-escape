@@ -132,3 +132,63 @@ SPARK = [
   "................","y..W.......W..y.","................","................","................",".y.....W.....y..",
   "................",".......y........","................","................"],
 ]
+
+# ---------------- world enemies (24x24): down / up / side rows, 4 frames each
+def _is_edge_k(g, x, y):
+    if g[y][x] != 'K': return False
+    for dx, dy in ((1,0),(-1,0),(0,1),(0,-1)):
+        nx, ny = x+dx, y+dy
+        if not (0 <= nx < len(g[0]) and 0 <= ny < len(g)) or g[ny][nx] == '.': return True
+    return False
+
+def enemy_views(front, body, y0, y1, shift=3):
+    """back view = facial features painted over with body colour; side view = features slid sideways."""
+    g = G(front)
+    feat = {}
+    for y in range(y0, y1+1):
+        for x in range(len(g[0])):
+            c = g[y][x]
+            if c not in ('.', body) and not _is_edge_k(g, x, y):
+                feat[(x, y)] = c
+    back = G(front)
+    for (x, y) in feat: back[y][x] = body
+    side = [list(r) for r in back]
+    for (x, y), c in feat.items():
+        nx = x + shift
+        if 0 <= nx < len(g[0]) and back[y][nx] == body: side[y][nx] = c
+    return S(g), S(back), S(side)
+
+def _shift_rows(rows, y0, y1, dx):
+    g = G(rows)
+    for y in range(y0, y1+1):
+        r = rows[y]
+        g[y] = list(('.'*dx + r[:-dx]) if dx > 0 else (r[-dx:] + '.'*(-dx)))
+    return S(g)
+
+def _bob(rows, dy):
+    return S(shift_v(G(rows), dy, keep_bottom=0))
+
+def enemy_rows(kind, front, body, y0, y1):
+    views = enemy_views(front, body, y0, y1)
+    rows = []
+    for v in views:
+        if kind == 'fire':      # flickering tongues + hover
+            f1 = _shift_rows(v, 0, 7, 1); f3 = _shift_rows(v, 0, 7, -1)
+            rows.append([v, _bob(f1, -1), v, _bob(f3, -1)])
+        elif kind == 'shark':   # bobbing swim with tail wag
+            f1 = _bob(v, -1); f3 = _bob(v, 1)
+            rows.append([v, f1, v, f3])
+        else:                   # imp: wing flap (outer columns up/down) + hover
+            def wings(rows_, dy):
+                g = G(rows_)
+                src = [r[:] for r in g]
+                for y in range(len(g)):
+                    for x in list(range(0, 4)) + list(range(20, 24)):
+                        g[y][x] = '.'
+                for y in range(len(g)):
+                    for x in list(range(0, 4)) + list(range(20, 24)):
+                        ny = y + dy
+                        if 0 <= ny < len(g) and src[y][x] != '.': g[ny][x] = src[y][x]
+                return S(g)
+            rows.append([v, _bob(wings(v, -2), -1), v, _bob(wings(v, 1), -1)])
+    return rows
