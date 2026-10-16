@@ -43,6 +43,7 @@ u16 municion_max() { return (modo_jugadores == 1) ? 2 : MAX_MUNICION; }
 
 void jugador_entrada(u16 joy, u16 pulsado) {
     if (timer_enredado > 0) return;                   // atrapada en la red
+    if (en_jefe && jefe_derrotado()) return;          // el jefe está cayendo: Flicki se queda mirando
     if (pulsado & (BUTTON_A | BUTTON_B)) lanzar_huevo();
 
     s16 ox = flicky.x & CELDA_MASK, oy = flicky.y & CELDA_MASK;

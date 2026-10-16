@@ -1,4 +1,5 @@
 IMAGE bg_title "gfx/bg_title.png"
+IMAGE img_claro "gen/claro_arena.png"
 IMAGE bg_opciones "gfx/bg_opciones.png"
 IMAGE bg_game_over "gfx/bg_game_over.png"
 IMAGE bg_fin_juego "gfx/bg_fin_juego.png"

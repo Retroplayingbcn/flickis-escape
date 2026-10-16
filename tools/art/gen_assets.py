@@ -27,11 +27,11 @@ def save_indexed(path, pix, w, h, pal):
 
 # ------------------------------------------------------------------ WORLD THEMES
 WORLDS = {
- 'bosque': dict(
-   wall=[(60,140,50),(36,96,40),(90,170,60),(160,230,110),(24,70,30)],     # mid,dark,light,hi,edge
+ 'bosque': dict(   # setos frondosos con cara frontal y florecillas; césped con manchas de sol
+   wall=[(44,124,52),(28,86,40),(76,160,60),(140,206,96),(16,52,30)],     # mid,dark,light,hi,edge
    nest=[(232,190,120),(176,112,48),(120,72,32)],
    hud=[(90,56,30),(240,200,120),(250,226,170)],
-   floor=[(136,186,80),(150,200,90),(120,170,70)], shadow=(96,140,60), shadow2=(80,120,52),
+   floor=[(132,188,74),(176,214,100),(104,156,58)], shadow=(84,128,50), shadow2=(70,108,44),
  ),
  'volcan': dict(   # basalt blocks with glowing lava seams on dark ash
    wall=[(92,64,72),(56,36,48),(128,92,96),(255,140,40),(32,18,28)],
@@ -100,6 +100,23 @@ def wall_pixel(mask, xx, yy, variant, world='bosque'):
         if not dn and yy > 11 + bump(xx): c = 5
         if not le and xx < 4 - bump(yy) and c == 1: c = 3
         return c
+    if world == 'bosque':
+        # seto frondoso: bultos de hojas, cara frontal oscura abajo (da altura) y alguna florecilla
+        if not dn and yy >= 11:
+            if yy == 15: return 5
+            return 2 if (xx + yy // 2) % 4 else 5
+        bx = (xx + (3 if (yy // 5) % 2 else 0)) % 6; by = yy % 5
+        d = (bx - 3) ** 2 + (by - 2) ** 2
+        c = 1
+        if d <= 2: c = 3
+        if d <= 0: c = 4
+        if d >= 7: c = 2
+        if not up and yy < 2: c = 4 if xx % 3 else 3
+        if not le and xx < 1: c = 2
+        if not ri and xx > 14: c = 5
+        k = hsh(xx // 3 + variant * 7, yy // 3 + variant * 3, 21) % 100
+        if k < 4 and 2 < yy < 10 and (xx + yy) % 3 == 0: c = 12 if k < 2 else 10
+        return c
     c = 2 if v < 18 else (1 if v < 55 else 3)          # dark / mid / light
     if v > 94: c = 4                                     # highlight sparkle
     if not up and yy < 3: c = 4 if v < 50 else 3
@@ -119,8 +136,14 @@ def floor_pixel(world, x, y, tex):
     if world == 'volcan':       # ash with scattered pebbles
         v = hsh(x + tex*8, y + tex*5, 13) % 100
         return 1 if v > 18 else (3 if v < 9 else 2)
-    v = hsh(x//2 + tex*8, y//2 + tex*5, 11) % 100
-    return 1 if v > 14 else (2 if v < 8 else 3)
+    # bosque: patrón continuo de 32x32 (la textura 0..3 es el cuarto de 16x16 que toca) con manchas de sol
+    X = x + (tex & 1) * 16; Y = y + (tex >> 1) * 16
+    a = 2 * math.pi / 32
+    v = math.sin(a * X) * math.cos(a * Y) + 0.6 * math.sin(a * (X + 2 * Y) + 1.3) + 0.4 * math.cos(a * (2 * X - Y) + 0.7)
+    c = 1
+    if v > 1.15 or (v > 1.0 and (X + Y) % 2): c = 2
+    if ((X * 7 + (Y // 3) * 13) % 23) == 0 and (Y % 3) != 2: c = 3
+    return c
 
 def metatile_to_tiles(get):
     """get(x,y)->index for 16x16; returns 4 tiles (TL,TR,BL,BR) each 8 rows of 8."""
@@ -535,4 +558,6 @@ def gen_bosses():
 if __name__ == '__main__':
     for w in WORLDS: gen_world(w)
     gen_items(); gen_hero(); gen_hunter(); gen_enemies(); gen_font(); gen_font(True); gen_hud(); gen_fx(); gen_bosses()
+    import claro_arena
+    print('arena del bosque, baldosas:', claro_arena.generar(os.path.join(OUT, 'claro_arena.png')))
     print('assets written to', OUT)

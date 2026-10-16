@@ -87,6 +87,7 @@ extern u8 distancia[MAP_HEIGHT][MAP_WIDTH];
 extern u8 deco[MAP_HEIGHT][MAP_WIDTH];        // adornos del suelo (0 = nada, 1..6) y piezas especiales:
 #define DECO_ESPECIAL 0x80                      //   muro dibujado como árbol/tronco/follaje (pieza en los bits bajos)
 #define DECO_CAMINO   0x40                      //   suelo de tierra (camino del claro)
+#define DECO_PINTADO  0x20                      //   muro que ya viene pintado en la imagen de la arena
 enum { PIEZA_ARBOL_TL, PIEZA_ARBOL_TR, PIEZA_ARBOL_BL, PIEZA_ARBOL_BR, PIEZA_TRONCO_I, PIEZA_TRONCO_D, PIEZA_FOLLAJE1, PIEZA_FOLLAJE2 };
 
 extern u16 d_sel, max_polluelos_nivel, semillas_en_fila, total_salvados, municion;
@@ -239,6 +240,7 @@ bool jefe_impacto(s16 x, s16 y);
 bool jefe_toca(s16 x, s16 y, s16 radio);
 void jefe_reset();
 bool jefe_caer();
+bool jefe_derrotado();
 s16 jefe_vida();
 s16 jefe_vida_max();
 const char* jefe_nombre();
