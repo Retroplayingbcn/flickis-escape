@@ -58,7 +58,7 @@ SPRITE shark_sprite "gen/shark.png" 3 3 FAST 0
 SPRITE imp_sprite "gen/imp.png" 3 3 FAST 0
 
 // ---- Fase 5: sonido (tools/sound) ----
-XGM2 musica "snd/titulo.vgm" "snd/menu.vgm" "snd/bosque.vgm" "snd/volcan.vgm" "snd/marino.vgm" "snd/celeste.vgm" "snd/intro.vgm" "snd/superada.vgm" "snd/gameover.vgm" "snd/victoria.vgm" "snd/continuar.vgm"
+XGM2 musica "snd/titulo.vgm" "snd/menu.vgm" "snd/bosque.vgm" "snd/volcan.vgm" "snd/marino.vgm" "snd/celeste.vgm" "snd/intro.vgm" "snd/superada.vgm" "snd/gameover.vgm" "snd/victoria.vgm" "snd/continuar.vgm" "snd/jefe.vgm"
 WAV sfx_click "snd/sfx_click.wav" XGM2
 WAV sfx_pio "snd/sfx_pio.wav" XGM2
 WAV sfx_nido0 "snd/sfx_nido0.wav" XGM2
@@ -75,3 +75,22 @@ WAV sfx_alerta "snd/sfx_alerta.wav" XGM2
 WAV sfx_panico "snd/sfx_panico.wav" XGM2
 WAV sfx_atrapado "snd/sfx_atrapado.wav" XGM2
 WAV sfx_rabia "snd/sfx_rabia.wav" XGM2
+
+// ---- Ajustes finales: huevos, efectos, jefes ----
+SPRITE huevo_sprite "gen/huevo.png" 2 2 FAST 3
+SPRITE estrellas_sprite "gen/estrellas.png" 3 1 FAST 0
+SPRITE popup_sprite "gen/popup.png" 4 1 FAST 0
+SPRITE polvo_sprite "gen/polvo.png" 2 2 FAST 4
+SPRITE proyectil_sprite "gen/proyectil.png" 2 2 FAST 6
+SPRITE jefe_cazador "gen/jefe_cazador.png" 6 6 FAST 0
+SPRITE jefe_llama "gen/jefe_llama.png" 6 6 FAST 0
+SPRITE jefe_tiburon "gen/jefe_tiburon.png" 6 6 FAST 0
+SPRITE jefe_diablillo "gen/jefe_diablillo.png" 6 6 FAST 0
+WAV sfx_lanzar "snd/sfx_lanzar.wav" XGM2
+WAV sfx_chof "snd/sfx_chof.wav" XGM2
+WAV sfx_aturdido "snd/sfx_aturdido.wav" XGM2
+WAV sfx_golpe "snd/sfx_golpe.wav" XGM2
+WAV sfx_explosion "snd/sfx_explosion.wav" XGM2
+WAV sfx_unavida "snd/sfx_unavida.wav" XGM2
+WAV sfx_teleport "snd/sfx_teleport.wav" XGM2
+WAV sfx_red "snd/sfx_red.wav" XGM2

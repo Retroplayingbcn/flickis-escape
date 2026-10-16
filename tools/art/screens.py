@@ -286,7 +286,8 @@ def nest(img, cx, cy, weave=(11, 12), dark=9, egg=15, shade=4):
         img[cy - 10, ex - 2] = 15
 
 def story_panel(img):
-    panel(img, 8, 172, 312, 220)
+    # aligned to the 8x8 tile grid: columns 1-38, rows 21-26 (text goes on rows 22 and 24, columns 3-36)
+    panel(img, 8, 168, 312, 216)
 
 def variants(es, en):
     return (('', es), ('_en', en))

@@ -192,3 +192,114 @@ def enemy_rows(kind, front, body, y0, y1):
                 return S(g)
             rows.append([v, _bob(wings(v, -2), -1), v, _bob(wings(v, 1), -1)])
     return rows
+
+# ---------------- phase 6 additions: egg projectile, dizzy stars, score popups, dust, boss projectiles
+import math as _m
+def _blank(w, h): return [['.'] * w for _ in range(h)]
+def _S(g): return [''.join(r) for r in g]
+
+def egg_frames():
+    frames = []
+    for k in range(4):                       # spinning egg
+        a = k * _m.pi / 4
+        g = _blank(16, 16)
+        for y in range(16):
+            for x in range(16):
+                dx, dy = x - 7.5, y - 7.5
+                u = dx * _m.cos(a) + dy * _m.sin(a); v = -dx * _m.sin(a) + dy * _m.cos(a)
+                d = (u / 3.6) ** 2 + (v / 4.8) ** 2
+                if d <= 1.0:
+                    g[y][x] = 'K' if d > 0.62 else ('c' if u > 1.2 else 'W')
+        frames.append(_S(g))
+    splat = []
+    for k in range(4):                       # splat: yolk + white splashes + shell bits
+        g = _blank(16, 16)
+        r = 2 + k
+        for y in range(16):
+            for x in range(16):
+                d = _m.hypot(x - 7.5, y - 8.5)
+                if d < r * 0.55 and k < 3: g[y][x] = 'Y' if d < r * 0.35 else 'y'
+                elif d < r and ((x * 3 + y * 5 + k) % 4) == 0: g[y][x] = 'W'
+        for i in range(4):
+            ang = i * _m.pi / 2 + k * 0.4
+            px = int(7.5 + _m.cos(ang) * (2 + 2 * k)); py = int(8 + _m.sin(ang) * (1 + 1.5 * k))
+            if 0 <= px < 15 and 0 <= py < 15: g[py][px] = 'c'; g[py][px + 1] = 'K'
+        splat.append(_S(g))
+    return [frames, splat]
+
+def star_frames():
+    star = [".Y.", "YWY", ".Y."]
+    rows = []
+    for k in range(4):
+        g = _blank(24, 8)
+        for i in range(3):
+            ang = (k + i * 4 / 3) * _m.pi / 2
+            x = int(10 + 8 * _m.cos(ang)); y = int(2 + 2 * _m.sin(ang))
+            for yy, r in enumerate(star):
+                for xx, c in enumerate(r):
+                    if c != '.' and 0 <= y + yy < 8 and 0 <= x + xx < 24: g[y + yy][x + xx] = c
+        rows.append(_S(g))
+    return [rows]
+
+POPUPS = ["+100", "+200", "+300", "+400", "+500", "+600", "+700", "+800", "+900", "+1000", "+250", "1UP"]
+def popup_frames(font):
+    rows = []
+    for t in POPUPS:
+        g = _blank(32, 8)
+        w = len(t) * 6 - 1; ox = (32 - w) // 2
+        col = 'G' if t == "1UP" else 'Y'
+        for i, ch in enumerate(t):
+            gl = font.get(ch) or font[' ']
+            for y in range(7):
+                for x in range(5):
+                    if gl[y][x] == '#':
+                        px = ox + i * 6 + x
+                        if y + 1 < 8 and px + 1 < 32 and g[y + 1][px + 1] == '.': g[y + 1][px + 1] = 'K'
+            for y in range(7):
+                for x in range(5):
+                    if gl[y][x] == '#': g[y][ox + i * 6 + x] = col
+        rows.append([_S(g)])
+    return rows
+
+def dust_frames():
+    out = []
+    for k in range(4):
+        g = _blank(16, 16)
+        for i, (cx, cy) in enumerate(((5, 11), (10, 11), (7.5, 9))):
+            r = 2 + k * 0.9 - i * 0.3
+            for y in range(16):
+                for x in range(16):
+                    d = _m.hypot(x - cx - (k if i == 1 else -k if i == 0 else 0) * 0.6, y - cy + k * 0.5)
+                    if d < r:
+                        if k == 3 and (x + y) % 2: continue
+                        g[y][x] = 'W' if d < r - 1.2 and k < 2 else 'c'
+        out.append(_S(g))
+    return [out]
+
+def projectile_frames():
+    def net(k):
+        g = _blank(16, 16)
+        for y in range(2, 14):
+            for x in range(2, 14):
+                if ((x + y + k) % 4 == 0 or (x - y + k) % 4 == 0) and _m.hypot(x - 7.5, y - 7.5) < 6.5: g[y][x] = 'c'
+        for a in range(24):
+            ang = a * _m.pi / 12; x = int(7.5 + 6.5 * _m.cos(ang)); y = int(7.5 + 6.5 * _m.sin(ang))
+            g[y][x] = 'K'
+        return _S(g)
+    def fire(k):
+        g = _blank(16, 16)
+        for y in range(16):
+            for x in range(16):
+                h = 6 + (2 if (x + k) % 3 == 0 else 0)
+                d = ((x - 7.5) / 5.5) ** 2 + ((y - 11) / h) ** 2
+                if d < 1 and y < 15:
+                    g[y][x] = 'Y' if d < 0.3 else ('O' if d < 0.6 else 'R')
+        return _S(g)
+    def ball(k):
+        g = _blank(16, 16)
+        for y in range(16):
+            for x in range(16):
+                d = _m.hypot(x - 7.5, y - 7.5)
+                if d < 5.5 + (k & 1): g[y][x] = 'W' if d < 2 else ('Y' if d < 3.5 else ('O' if d < 5 else 'R'))
+        return _S(g)
+    return [[net(0), net(2)], [fire(0), fire(1)], [ball(0), ball(1)]]

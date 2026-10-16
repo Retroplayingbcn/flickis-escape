@@ -274,4 +274,14 @@ add('continuar', "Flicki's Escape - Continue", 96,
     ['e5:2 c5:2', 'a4:2 c5:2', 'g4:2 e5:2', 'd5:1'],
     lead=5, drums='light', bass='root4', arp=True)
 
+
+# ---------------------------------------------------------------- BOSS (E minor, arcade showdown)
+add('jefe', "Flicki's Escape - Boss", 172,
+    ['Em', 'Em', 'C', 'D', 'Em', 'Em', 'C', 'B7', 'Am', 'Em', 'C', 'B7', 'Am', 'Em', 'C D', 'B7'],
+    ['e5:8 e5:8 b4:8 e5:8 g5:8 f#5:8 e5:8 b4:8', 'e5:8 g5:8 b5:8 g5:8 a5:8 g5:8 f#5:8 e5:8', 'c5:8 e5:8 g5:8 c6:8 b5:8 g5:8 e5:4', 'd5:8 f#5:8 a5:8 d6:8 c6:8 a5:8 f#5:4',
+     'e5:8 e5:8 b4:8 e5:8 g5:8 f#5:8 e5:8 b4:8', 'g5:8 a5:8 b5:8 e6:8 d6:8 b5:8 g5:4', 'c6:8 b5:8 a5:8 g5:8 e5:8 g5:8 c6:4', 'b5:4 a5:8 f#5:8 d#5:4 b4:4',
+     'a4:8 c5:8 e5:8 a5:8 g5:4 e5:4', 'b4:8 e5:8 g5:8 b5:8 a5:4 g5:4', 'c5:8 e5:8 g5:8 e5:8 c6:4 b5:4', 'b5:8 a5:8 f#5:8 d#5:8 b4:2',
+     'a5:4 c6:4 e6:4 c6:4', 'g5:4 b5:4 e6:4 b5:4', 'c6:8 b5:8 a5:8 g5:8 d6:8 c6:8 b5:8 a5:8', 'b5:2. r:4'],
+    bass='drive', drums='drive', lead=6)
+
 print('\n'.join(os.path.basename(s) for s in SONGS))

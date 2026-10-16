@@ -84,4 +84,14 @@ save(os.path.join(SFX, 'sfx_atrapado.wav'), seq(tone(lambda t: 900 * 2 ** (-t * 
                                                  tone(N(43), 0.25, 'tri', 0.002, 0.12)))
 save(os.path.join(SFX, 'sfx_rabia.wav'), mix(tone(lambda t: 80 + 40 * math.sin(2 * math.pi * 30 * t), 0.5, 'sq', 0.01, 0.35, 0.3),
                                               [v * 0.5 for v in noise(0.5, 0.3, 0.5)]))
+
+# ---------------- phase 6: eggs, bosses, extra life
+save(os.path.join(SFX, 'sfx_lanzar.wav'), mix(tone(lambda t: 500 + 2500 * t, 0.12, 'sq', 0.002, 0.08, 0.25), [v * 0.4 for v in noise(0.12, 0.06, 0.3)]))
+save(os.path.join(SFX, 'sfx_chof.wav'), mix([v * 0.7 for v in noise(0.18, 0.06, 0.55)], tone(lambda t: 260 - 500 * t, 0.18, 'tri', 0.001, 0.06)))
+save(os.path.join(SFX, 'sfx_aturdido.wav'), seq(*[tone(N(m), 0.05, 'sq', 0.001, 0.04, 0.25) for m in (96, 91, 96, 91, 96, 91)]))
+save(os.path.join(SFX, 'sfx_golpe.wav'), mix(tone(lambda t: 180 * 2 ** (-t * 6), 0.2, 'sq', 0.001, 0.1, 0.5), noise(0.2, 0.08, 0.4)))
+save(os.path.join(SFX, 'sfx_explosion.wav'), mix(noise(0.9, 0.35, 0.75), [v * 0.6 for v in tone(lambda t: 90 - 50 * t, 0.9, 'sq', 0.002, 0.4, 0.5)]))
+save(os.path.join(SFX, 'sfx_unavida.wav'), seq(*[tone(N(m), d, 'sq', 0.002, 0.12, 0.5) for m, d in ((76, 0.07), (79, 0.07), (88, 0.07), (84, 0.07), (86, 0.07), (91, 0.22))]))
+save(os.path.join(SFX, 'sfx_teleport.wav'), tone(lambda t: 1600 * 2 ** (-t * 10) + 200, 0.25, 'sq', 0.001, 0.15, 0.3, 0.05))
+save(os.path.join(SFX, 'sfx_red.wav'), mix(tone(lambda t: 300 + 900 * t, 0.15, 'tri', 0.002, 0.1), [v * 0.3 for v in noise(0.15, 0.08, 0.2)]))
 print('samples written')
