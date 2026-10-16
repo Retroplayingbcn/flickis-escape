@@ -574,6 +574,13 @@ void resetear_tiempo_nivel();
 void leer_entrada();
 void actualizar_logica();
 void efecto_chispa(s16 x, s16 y);
+void pantalla_sprites_reset();
+Sprite* pantalla_sprite(const SpriteDefinition* def, s16 x, s16 y, u16 pal, u16 anim, s16 vx, bool flip);
+extern bool titulo_parpadeo;
+void pantalla_actualizar();
+void pantalla_imagen(const Image* img);
+void pantalla_olvidar_imagen();
+void texto_centrado(const char* txt, u16 y);
 void efectos_actualizar();
 void efectos_reset();
 void animar_polluelos_mapa();
@@ -1064,6 +1071,7 @@ int main(bool hard) {
             }
         }
 
+        if (estado_actual != ESTADO_JUEGO) pantalla_actualizar();
         musica_actualizar();
         SPR_update();
         SYS_doVBlankProcess();
@@ -1089,135 +1097,162 @@ void resetear_tiempo_nivel() {
 }
 
 void mostrar_pantalla_titulo() {
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
-    PAL_setPalette(PAL0, bg_title.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_title, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    pantalla_imagen(&bg_title);
     VDP_loadFont(&ts_font, DMA);
     VDP_setTextPalette(PAL0);
-    PAL_setColor(15, RGB24_TO_VDPCOLOR(0xFFFFFF));
-    
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
+    // desfile: el pájaro con sus polluelos huyendo del cazador
+    pantalla_sprite(&hero_sprite, -24, 160, PAL2, ANIM_LADO, 1, FALSE);
+    for (u16 i = 0; i < 3; i++) pantalla_sprite(&chick_sprite, -48 - i * 18, 160, PAL2, 0, 1, FALSE);
+    pantalla_sprite(&hunter_sprite, -150, 152, PAL3, ANIM_LADO, 1, FALSE);
+    texto_centrado("(C) 2026 RETROPLAYING BCN", 26);
     musica_segun_estado(ESTADO_TITULO);
-    texto_animado("PRESIONA START", 13, 22, 3);
+    titulo_parpadeo = TRUE;
+}
+
+// Colores de texto de los menús: PAL0 blanco (seleccionado), PAL1 dorado (títulos), PAL3 gris (resto).
+// El índice 13 de cada paleta es el color del panel: la fuente opaca se funde con él.
+static void menu_paletas(const Image* img) {
+    u16 panel = img->palette->data[13];
+    PAL_setColor(16 + 13, panel); PAL_setColor(16 + 14, 0); PAL_setColor(16 + 15, RGB24_TO_VDPCOLOR(0xFFD860));
+    PAL_setColor(48 + 13, panel); PAL_setColor(48 + 14, 0); PAL_setColor(48 + 15, RGB24_TO_VDPCOLOR(0x8890A8));
+}
+static void menu_texto(const char* txt, u16 x, u16 y, u16 pal) {
+    VDP_setTextPalette(pal);
+    VDP_drawText(txt, x, y);
+    VDP_setTextPalette(PAL0);
+}
+static void menu_opcion(const char* txt, u16 x, u16 y, bool sel) {
+    menu_texto(sel ? ">" : " ", x, y, PAL0);
+    menu_texto(txt, x + 2, y, sel ? PAL0 : PAL3);
 }
 
 void mostrar_menu_opciones() {
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
     char buf[40];
-
-    PAL_setPalette(PAL1, bg_opciones.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_opciones, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-
-    VDP_loadFont(&ts_font_menu, DMA);          // fuente con fondo opaco: legible sobre la ilustración
-    VDP_setTextPalette(PAL2);
-    PAL_setColor(47, RGB24_TO_VDPCOLOR(0xFFFFFF));
-    PAL_setColor(46, RGB24_TO_VDPCOLOR(0x000000));
-    PAL_setColor(45, RGB24_TO_VDPCOLOR(0x182030)); 
-
+    pantalla_imagen(&bg_opciones);
+    VDP_loadFont(&ts_font_menu, DMA);          // fuente con fondo del color del panel
+    menu_paletas(&bg_opciones);
     musica_segun_estado(ESTADO_MENU);
 
-    sprintf(buf, "PARTIDAS JUGADAS: %ld", total_partidas);
-    VDP_drawText(buf, 4, 2);
-    sprintf(buf, "PUNTOS MAXIMOS:   %06ld", puntuacion_maxima);
-    VDP_drawText(buf, 4, 3);
-    
-    sprintf(buf, "WINS P1 (PAJ): %ld | P2 (CAZ): %ld", victorias_pajaro, victorias_cazador);
-    VDP_drawText(buf, 4, 4);
+    sprintf(buf, "PARTIDAS %-5ld   RECORD %06ld", total_partidas, puntuacion_maxima);
+    menu_texto(buf, 3, 6, PAL3);
+    sprintf(buf, "VICTORIAS  PAJARO %ld  CAZADOR %ld", victorias_pajaro, victorias_cazador);
+    menu_texto(buf, 3, 7, PAL3);
 
-    VDP_drawText("MODO DE JUEGO (IZQ/DER):", 4, 7);
-    VDP_drawText(modo_jugadores == 0 ? "> 1 JUGADOR  (VS CPU)" : "  1 JUGADOR  (VS CPU)", 6, 8);
-    VDP_drawText(modo_jugadores == 1 ? "> 2 JUGADORES (MANUAL)" : "  2 JUGADORES (MANUAL)", 6, 9);
+    menu_texto("JUGADORES", 3, 9, PAL1);           menu_texto("IZQ/DER", 30, 9, PAL3);
+    menu_opcion("1 JUGADOR CONTRA LA CPU", 4, 10, modo_jugadores == 0);
+    menu_opcion("2 JUGADORES", 4, 11, modo_jugadores == 1);
 
-    VDP_drawText("ESTRUCTURA PARTIDA (PULSA A/B):", 4, 12);
-    VDP_drawText(modo_juego_seleccionada == 0 ? "> MODO HISTORIA (4 MUNDOS x 5 FASES)" : "  MODO HISTORIA (4 MUNDOS x 5 FASES)", 6, 13);
-    VDP_drawText(modo_juego_seleccionada == 1 ? "> MODO LIBRE    (1 MAPA RANDOM)" : "  MODO LIBRE    (1 MAPA RANDOM)", 6, 14);
+    menu_texto("MODO", 3, 13, PAL1);                menu_texto("A / B", 32, 13, PAL3);
+    menu_opcion("HISTORIA  4 MUNDOS x 5 FASES", 4, 14, modo_juego_seleccionada == 0);
+    menu_opcion("LIBRE     UN MAPA AL AZAR", 4, 15, modo_juego_seleccionada == 1);
 
-    VDP_drawText("MODO ESPECIAL (PULSA C):", 4, 17);
-    VDP_drawText(modo_battle_royale ? "> BATTLE ROYALE: ACTIVO!" : "  BATTLE ROYALE: DESACT.", 6, 18);
+    menu_texto("BATTLE ROYALE", 3, 17, PAL1);       menu_texto("C", 36, 17, PAL3);
+    menu_opcion(modo_battle_royale ? "ACTIVADO" : "DESACTIVADO", 4, 18, TRUE);
 
-    VDP_drawText("SELECCIONA DIFICULTAD (ARR/ABA):", 4, 21);
-    VDP_drawText(d_sel == 0 ? "> FACIL    (2 MIN / 5 HUEVOS)" : "  FACIL    (2 MIN / 5 HUEVOS)", 6, 22);
-    VDP_drawText(d_sel == 1 ? "> MEDIO   (3 MIN / 10 HUEVOS)" : "  MEDIO   (3 MIN / 10 HUEVOS)", 6, 23);
-    VDP_drawText(d_sel == 2 ? "> DIFICIL (5 MIN / 15 HUEVOS)" : "  DIFICIL (5 MIN / 15 HUEVOS)", 6, 24);
+    menu_texto("DIFICULTAD", 3, 20, PAL1);          menu_texto("ARR/ABA", 30, 20, PAL3);
+    menu_opcion("FACIL    2 MIN   5 POLLUELOS", 4, 21, d_sel == 0);
+    menu_opcion("MEDIO    3 MIN  10 POLLUELOS", 4, 22, d_sel == 1);
+    menu_opcion("DIFICIL  5 MIN  15 POLLUELOS", 4, 23, d_sel == 2);
+
+    menu_texto("PULSA START PARA JUGAR", 9, 25, PAL1);
+}
+
+static void icono_item(u16 base, u16 item, u16 col, u16 fila) {
+    u16 t = base + item * 4;
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 1, 0, 0, t),     col,     fila);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 1, 0, 0, t + 1), col + 1, fila);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 1, 0, 0, t + 2), col,     fila + 1);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 1, 0, 0, t + 3), col + 1, fila + 1);
 }
 
 void mostrar_pantalla_como_jugar() {
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
-    PAL_setPalette(PAL1, bg_como_jugar.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_como_jugar, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    pantalla_imagen(&bg_como_jugar);
+    VDP_loadFont(&ts_font_menu, DMA);
+    menu_paletas(&bg_como_jugar);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    // iconos de los objetos (mismos tiles que en el juego), justo detrás de la imagen
+    u16 base = TILE_USER_INDEX + bg_como_jugar.tileset->numTile;
+    VDP_loadTileSet(&ts_items, base, DMA);
+
+    icono_item(base, 0, 2, 6);
+    menu_texto("RECOGE LOS POLLUELOS Y LLEVALOS", 5, 6, PAL0);
+    menu_texto("AL NIDO DEL CENTRO DEL LABERINTO.", 5, 7, PAL0);
+    PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
+    pantalla_sprite(&hunter_sprite, 12, 70, PAL3, ANIM_ABAJO, 0, FALSE);
+    menu_texto("SI EL CAZADOR TE PILLA, TUS", 5, 9, PAL0);
+    menu_texto("POLLUELOS SE ESCAPAN. SIN NINGUNO", 5, 10, PAL0);
+    menu_texto("DETRAS, PIERDES LA PARTIDA.", 5, 11, PAL0);
+    icono_item(base, 1, 2, 13);
+    menu_texto("RELOJ: FRENA AL CAZADOR.", 5, 13, PAL1);
+    icono_item(base, 2, 2, 15);
+    menu_texto("RAYO: CORRES EL DOBLE.", 5, 15, PAL1);
+    icono_item(base, 3, 2, 17);
+    menu_texto("GEMA: 250 PUNTOS EXTRA.", 5, 17, PAL1);
+    menu_texto("SI LOS MUROS SE PONEN ROJOS, EL", 5, 19, PAL0);
+    menu_texto("CAZADOR ENTRA EN RABIA: HUYE!", 5, 20, PAL0);
+    menu_texto("CADA 2500 PUNTOS GANAS UN", 5, 22, PAL0);
+    menu_texto("CONTINUE EXTRA.", 5, 23, PAL0);
+    menu_texto("PULSA START", 14, 25, PAL1);
 }
 
 // ===== MENÚ VERSUS ACTUALIZADO CON SELECCIÓN DE ESCENARIO Y "VOLVER AL MENÚ" =====
 void mostrar_menu_versus() {
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
     char buf[40];
+    pantalla_imagen(&bg_versus);
+    VDP_loadFont(&ts_font_menu, DMA);
+    menu_paletas(&bg_versus);
 
-    VDP_loadFont(&ts_font, DMA);
-    PAL_setPalette(PAL0, bg_versus.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_versus, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-    
-    VDP_setTextPalette(PAL0);
-    PAL_setColor(15, RGB24_TO_VDPCOLOR(0xFFFFFF));
-
-    VDP_drawText("CONFIGURACION VERSUS", 10, 3);
-    VDP_drawText("====================", 10, 4);
-
-    sprintf(buf, "%s BATTLE ROYALE: %s", (versus_sel == 0) ? ">" : " ", modo_battle_royale ? "ON " : "OFF");
-    VDP_drawText(buf, 7, 7);
+    menu_opcion(modo_battle_royale ? "BATTLE ROYALE      SI" : "BATTLE ROYALE      NO", 5, 7, versus_sel == 0);
 
     u16 segs = (versus_tiempo_idx == 0) ? 60 : ((versus_tiempo_idx == 1) ? 90 : ((versus_tiempo_idx == 2) ? 120 : 180));
-    sprintf(buf, "%s TIEMPO RONDA:  %d SEG", (versus_sel == 1) ? ">" : " ", segs);
-    VDP_drawText(buf, 7, 10);
+    sprintf(buf, "TIEMPO DE RONDA    %d SEG", segs);
+    menu_opcion(buf, 5, 10, versus_sel == 1);
 
-    sprintf(buf, "%s AL MEJOR DE:   %d WINS", (versus_sel == 2) ? ">" : " ", versus_victorias_req);
-    VDP_drawText(buf, 7, 13);
+    sprintf(buf, "AL MEJOR DE        %d", versus_victorias_req);
+    menu_opcion(buf, 5, 13, versus_sel == 2);
 
     const char* nombre_mundo;
     switch (versus_mundo_idx) {
-        case 0: nombre_mundo = "BOSQUE  "; break;
-        case 1: nombre_mundo = "VOLCAN  "; break;
-        case 2: nombre_mundo = "MARINO  "; break;
-        case 3: nombre_mundo = "CELESTE "; break;
-        default: nombre_mundo = "ALEATORIO"; break;
+        case 0: nombre_mundo = "BOSQUE"; break;
+        case 1: nombre_mundo = "VOLCAN"; break;
+        case 2: nombre_mundo = "MAR"; break;
+        case 3: nombre_mundo = "CIELO"; break;
+        default: nombre_mundo = "AL AZAR"; break;
     }
-    sprintf(buf, "%s ESCENARIO:     %s", (versus_sel == 3) ? ">" : " ", nombre_mundo);
-    VDP_drawText(buf, 7, 16);
+    sprintf(buf, "ESCENARIO          %s", nombre_mundo);
+    menu_opcion(buf, 5, 16, versus_sel == 3);
 
-    // NUEVO: Opción interactiva para volver
-    sprintf(buf, "%s VOLVER AL MENU PRINCIPAL", (versus_sel == 4) ? ">" : " ");
-    VDP_drawText(buf, 7, 19);
+    menu_opcion("VOLVER AL MENU", 5, 19, versus_sel == 4);
 
-    VDP_drawText("P1 (MANDO 1) = PAJARO", 7, 22);
-    VDP_drawText("P2 (MANDO 2) = CAZADOR", 7, 23);
-
-    VDP_drawText("PULSA START PARA PELEAR", 9, 25);
+    menu_texto("MANDO 1: PAJARO", 5, 22, PAL3);
+    menu_texto("MANDO 2: CAZADOR", 5, 23, PAL3);
+    menu_texto("PULSA START PARA EMPEZAR", 8, 25, PAL1);
 }
 
 void mostrar_intro_mundo_actual() {
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
-
     for(u8 i = 0; i < 4; i++) PSG_setEnvelope(i, 15);
-
-    if (mundo_actual == MUNDO_BOSQUE) {
-        PAL_setPalette(PAL1, bg_intro_bosque.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_intro_bosque, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-    } else if (mundo_actual == MUNDO_VOLCAN) {
-        PAL_setPalette(PAL1, bg_intro_volcan.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_intro_volcan, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-    } else if (mundo_actual == MUNDO_MARINO) {
-        PAL_setPalette(PAL1, bg_intro_acuatico.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_intro_acuatico, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-    } else {
-        PAL_setPalette(PAL1, bg_intro_celeste.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_intro_celeste, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-    }
+    const Image* img = &bg_intro_bosque;
+    const SpriteDefinition* enemigo = &hunter_sprite;
+    if (mundo_actual == MUNDO_VOLCAN)       { img = &bg_intro_volcan;    enemigo = &flame_sprite; }
+    else if (mundo_actual == MUNDO_MARINO)  { img = &bg_intro_acuatico;  enemigo = &shark_sprite; }
+    else if (mundo_actual == MUNDO_CELESTE) { img = &bg_intro_celeste;   enemigo = &imp_sprite; }
+    pantalla_imagen(img);
+    VDP_loadFont(&ts_font, DMA);
+    VDP_setTextPalette(PAL0);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    PAL_setPalette(PAL3, enemigo->palette->data, CPU);
+    pantalla_sprite(&hero_sprite, 104, 150, PAL2, ANIM_LADO, 0, FALSE);
+    pantalla_sprite(&chick_sprite, 84, 150, PAL2, 0, 0, FALSE);
+    pantalla_sprite(enemigo, 196, 142, PAL3, ANIM_LADO, 0, TRUE);
+    titulo_parpadeo = TRUE;
 }
 
 void inicializar_juego() {
+    pantalla_sprites_reset();
+    pantalla_olvidar_imagen();
+    titulo_parpadeo = FALSE;
     VDP_clearPlane(BG_A, TRUE);
     VDP_clearPlane(BG_B, TRUE);
     cargar_graficos_mundo();
@@ -1312,6 +1347,7 @@ void finalizar_partida() {
     VDP_setHorizontalScroll(BG_B, 0);
     
     efectos_reset();
+    pantalla_sprites_reset();
     SPR_clear();
     SPR_update();
     SYS_doVBlankProcess();
@@ -1325,16 +1361,16 @@ void mostrar_pantalla_continue() {
     finalizar_partida();
     estado_actual = ESTADO_CONTINUE;
     musica_segun_estado(ESTADO_CONTINUE);
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
-    
     muros_alerta(FALSE);
-    
-    VDP_setTextPalette(PAL0); 
+    pantalla_imagen(&bg_continue);
+    VDP_loadFont(&ts_font, DMA);
+    VDP_setTextPalette(PAL0);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
     char buf[40];
-    sprintf(buf, "CONTINUES: %d", continues_restantes);
-    VDP_drawText(buf, 14, 10);
-    VDP_drawText("PULSA START PARA SEGUIR", 8, 13);
+    sprintf(buf, "TE QUEDAN %d CONTINUES", continues_restantes);
+    texto_centrado(buf, 12);
+    pantalla_sprite(&hero_sprite, 152, 160, PAL2, ANIM_HERIDO, 0, FALSE);
+    titulo_parpadeo = TRUE;
 }
 
 void mostrar_game_over() {
@@ -1345,8 +1381,19 @@ void mostrar_game_over() {
     estado_actual = ESTADO_GAMEOVER;
     VDP_clearPlane(BG_A, TRUE);
     VDP_clearPlane(BG_B, TRUE);
-    PAL_setPalette(PAL0, bg_game_over.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_game_over, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    pantalla_imagen(&bg_game_over);
+    VDP_loadFont(&ts_font, DMA);
+    VDP_setTextPalette(PAL0);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
+    {
+        char buf[40];
+        sprintf(buf, "PUNTOS %06ld   RECORD %06ld", flicky.puntuacion, puntuacion_maxima);
+        texto_centrado(buf, 12);
+    }
+    pantalla_sprite(&hunter_sprite, 176, 152, PAL3, ANIM_LADO, 0, TRUE);
+    pantalla_sprite(&hero_sprite, 136, 160, PAL2, ANIM_HERIDO, 0, FALSE);
+    titulo_parpadeo = TRUE;
     
     musica_segun_estado(ESTADO_GAMEOVER);
     efecto_shake(10, 2);
@@ -1363,8 +1410,18 @@ void mostrar_enhorabuena() {
 
     for(u8 i = 0; i < 4; i++) PSG_setEnvelope(i, 15);
 
-    PAL_setPalette(PAL0, bg_fin_juego.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_fin_juego, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    pantalla_imagen(&bg_fin_juego);
+    VDP_loadFont(&ts_font, DMA);
+    VDP_setTextPalette(PAL0);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    {
+        char buf[40];
+        sprintf(buf, "PUNTOS %06ld", flicky.puntuacion);
+        texto_centrado(buf, 15);
+    }
+    pantalla_sprite(&hero_sprite, 152, 150, PAL2, ANIM_FELIZ, 0, FALSE);
+    for (u16 i = 0; i < 4; i++) pantalla_sprite(&chick_sprite, 104 + i * 32 + (i >= 2 ? 16 : 0) - (i >= 2 ? 0 : 0), 158, PAL2, 0, 0, FALSE);
+    titulo_parpadeo = TRUE;
     
     musica_segun_estado(ESTADO_FINJUEGO);
     efecto_shake(10, 2);
@@ -1386,13 +1443,23 @@ void verificar_fin_ronda_versus(bool gano_pajaro) {
 
         for(u8 i = 0; i < 4; i++) PSG_setEnvelope(i, 15);
 
+        PAL_setPalette(PAL2, pal_items.data, CPU);
         if (victorias_pajaro >= versus_victorias_req) {
-            PAL_setPalette(PAL0, bg_pajaro_ganador.palette->data, CPU);
-            VDP_drawImageEx(BG_B, &bg_pajaro_ganador, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+            pantalla_imagen(&bg_pajaro_ganador);
+            pantalla_sprite(&hero_sprite, 152, 150, PAL2, ANIM_FELIZ, 0, FALSE);
         } else {
-            PAL_setPalette(PAL0, bg_cazador_ganador.palette->data, CPU);
-            VDP_drawImageEx(BG_B, &bg_cazador_ganador, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+            pantalla_imagen(&bg_cazador_ganador);
+            PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
+            pantalla_sprite(&hunter_sprite, 148, 144, PAL3, ANIM_ABAJO, 0, FALSE);
         }
+        VDP_loadFont(&ts_font, DMA);
+        VDP_setTextPalette(PAL0);
+        {
+            char buf[40];
+            sprintf(buf, "PAJARO %ld  -  %ld CAZADOR", victorias_pajaro, victorias_cazador);
+            texto_centrado(buf, 12);
+        }
+        titulo_parpadeo = TRUE;
         musica_segun_estado(ESTADO_FINJUEGO);
     } else {
         flicky.puntuacion = 0;
@@ -2173,5 +2240,82 @@ void secuencia_heroe(u8 anim, u16 frames, bool salta) {
         musica_actualizar();
         SPR_update();
         SYS_doVBlankProcess();
+    }
+}
+
+
+// ================= FASE 4: PANTALLAS =================
+#define MAX_SPR_PANTALLA 10
+static Sprite* spr_pant[MAX_SPR_PANTALLA];
+static s16 spr_pant_x[MAX_SPR_PANTALLA], spr_pant_y[MAX_SPR_PANTALLA], spr_pant_vx[MAX_SPR_PANTALLA];
+bool titulo_parpadeo = FALSE;
+
+void pantalla_olvidar_imagen();
+void pantalla_sprites_reset() {
+    for (u16 i = 0; i < MAX_SPR_PANTALLA; i++) {
+        if (spr_pant[i]) SPR_releaseSprite(spr_pant[i]);
+        spr_pant[i] = NULL;
+    }
+}
+
+Sprite* pantalla_sprite(const SpriteDefinition* def, s16 x, s16 y, u16 pal, u16 anim, s16 vx, bool flip) {
+    for (u16 i = 0; i < MAX_SPR_PANTALLA; i++) {
+        if (spr_pant[i] == NULL) {
+            Sprite* sp = SPR_addSprite(def, x, y, TILE_ATTR(pal, 1, FALSE, flip));
+            if (!sp) return NULL;
+            SPR_setAnim(sp, anim);
+            spr_pant[i] = sp; spr_pant_x[i] = x; spr_pant_y[i] = y; spr_pant_vx[i] = vx;
+            return sp;
+        }
+    }
+    return NULL;
+}
+
+// Imagen de fondo a pantalla completa en el plano B (paleta 0) con el plano A limpio
+static const Image* imagen_actual = NULL;
+void pantalla_imagen(const Image* img) {
+    pantalla_sprites_reset();
+    if (img == imagen_actual) {          // misma pantalla (p.ej. moverse por un menú): solo se rehace el texto
+        VDP_clearPlane(BG_A, TRUE);
+        return;
+    }
+    imagen_actual = img;
+    VDP_setEnable(FALSE);
+    VDP_clearPlane(BG_A, TRUE);
+    VDP_clearPlane(BG_B, TRUE);
+    VDP_setHorizontalScroll(BG_A, 0);
+    VDP_setHorizontalScroll(BG_B, 0);
+    PAL_setPalette(PAL0, img->palette->data, CPU);
+    VDP_drawImageEx(BG_B, img, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    VDP_setEnable(TRUE);
+}
+
+void pantalla_olvidar_imagen() { imagen_actual = NULL; }
+
+void texto_centrado(const char* txt, u16 y) {
+    VDP_drawText(txt, (40 - strlen(txt)) / 2, y);
+}
+
+// Animación de las pantallas: sprites que andan o se mueven en el sitio y "PULSA START" parpadeando
+void pantalla_actualizar() {
+    static u16 t = 0;
+    t++;
+    for (u16 i = 0; i < MAX_SPR_PANTALLA; i++) {
+        Sprite* sp = spr_pant[i];
+        if (!sp) continue;
+        if ((t & 7) == 0) SPR_nextFrame(sp);
+        if (spr_pant_vx[i] != 0 && (t & 1)) {
+            spr_pant_x[i] += spr_pant_vx[i];
+            if (spr_pant_x[i] > 336) spr_pant_x[i] -= 400;
+        }
+        // los polluelos dan saltitos
+        s16 dy = (sp->definition == &chick_sprite) ? (((t + i * 5) & 15) < 4 ? -2 : 0) : 0;
+        SPR_setPosition(sp, spr_pant_x[i], spr_pant_y[i] + dy);
+    }
+    if (titulo_parpadeo && (estado_actual == ESTADO_TITULO || estado_actual == ESTADO_INTRO ||
+                            estado_actual == ESTADO_CONTINUE || estado_actual == ESTADO_GAMEOVER || estado_actual == ESTADO_FINJUEGO)) {
+        u16 fila = (estado_actual == ESTADO_TITULO) ? 17 : 24;
+        if ((t & 31) == 0) texto_centrado("PULSA START", fila);
+        else if ((t & 31) == 20) VDP_clearText(14, fila, 12);
     }
 }
