@@ -3,6 +3,23 @@
 #ifndef _RES_RESOURCES_H_
 #define _RES_RESOURCES_H_
 
+extern const u8 sfx_click[768];
+extern const u8 sfx_pio[1280];
+extern const u8 sfx_nido0[2304];
+extern const u8 sfx_nido1[2304];
+extern const u8 sfx_nido2[2304];
+extern const u8 sfx_nido3[2304];
+extern const u8 sfx_nido4[2304];
+extern const u8 sfx_gema[3072];
+extern const u8 sfx_reloj[6144];
+extern const u8 sfx_rayo[3328];
+extern const u8 sfx_meta[6656];
+extern const u8 sfx_cierre[4864];
+extern const u8 sfx_alerta[2560];
+extern const u8 sfx_panico[5376];
+extern const u8 sfx_atrapado[11520];
+extern const u8 sfx_rabia[6656];
+extern const u8 musica[23296];
 extern const Image bg_title;
 extern const Image bg_opciones;
 extern const Image bg_game_over;

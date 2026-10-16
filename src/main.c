@@ -59,154 +59,8 @@
 #define TIEMPO_INVULNERABILIDAD_FRAMES 150  // ~2.5 segundos a 60fps
 #define RADIO_DISPERSION 3  // Radio en celdas para dispersar polluelos
 
-// ===== SISTEMA DE MÚSICA DE FONDO =====
-#define N_SIL   0
-#define N_DO3   857
-#define N_RE3   764
-#define N_MI3   681
-#define N_FA3   642
-#define N_SOL3  572
-#define N_LA3   508
-#define N_SI3   453
-#define N_DO4   428
-#define N_RE4   381
-#define N_MI4   339
-#define N_FA4   320
-#define N_SOL4  285
-#define N_LA4   254
-#define N_SI4   226
-#define N_DO5   214
-#define N_RE5   190
-#define N_MI5   170
-#define N_FA5   160
-#define N_SOL5  143
+// (la música y los efectos van por el driver XGM2: ver "SONIDO" más abajo)
 
-typedef struct {
-    u16 tono;
-    u8  dur;
-} MusicNote;
-
-typedef struct {
-    const MusicNote* notas;
-    u16 longitud;
-    u16 posicion;
-    u16 contador;
-    u8  canal;
-    bool activa;
-    bool loop;
-} CanalMusica;
-
-CanalMusica mus_melodia;
-CanalMusica mus_bajo;
-u16 mus_tempo = 6;
-u16 mus_tick_counter = 0;
-bool mus_activa = FALSE;
-u8 mus_volumen_melodia = 7; 
-u8 mus_volumen_bajo = 9;   
-
-// --- MELODÍAS ---
-const MusicNote mel_titulo[] = {
-    {N_MI4, 2}, {N_SOL4, 2}, {N_LA4, 4}, {N_SOL4, 2},
-    {N_MI4, 2}, {N_RE4, 4}, {N_DO4, 2}, {N_RE4, 2},
-    {N_MI4, 8}, {N_SIL, 2},
-    {N_SOL4, 2}, {N_LA4, 2}, {N_SI4, 4}, {N_LA4, 2},
-    {N_SOL4, 2}, {N_MI4, 4}, {N_RE4, 2}, {N_MI4, 2},
-    {N_DO4, 8}, {N_SIL, 4},
-};
-const MusicNote baj_titulo[] = {
-    {N_DO3, 4}, {N_DO3, 4}, {N_SOL3, 4}, {N_SOL3, 4},
-    {N_LA3, 4}, {N_LA3, 4}, {N_FA3, 4}, {N_FA3, 4},
-    {N_DO3, 4}, {N_DO3, 4}, {N_SOL3, 4}, {N_SOL3, 4},
-    {N_DO3, 8}, {N_SOL3, 8},
-};
-
-const MusicNote mel_menu[] = {
-    {N_SOL4, 4}, {N_MI4, 4}, {N_DO4, 4}, {N_RE4, 4},
-    {N_MI4, 4}, {N_FA4, 4}, {N_SOL4, 8},
-    {N_LA4, 4}, {N_SOL4, 4}, {N_FA4, 4}, {N_MI4, 4},
-    {N_RE4, 4}, {N_DO4, 4}, {N_RE4, 8},
-};
-const MusicNote baj_menu[] = {
-    {N_DO3, 8}, {N_FA3, 8}, {N_SOL3, 8}, {N_DO3, 8},
-    {N_FA3, 8}, {N_SOL3, 8}, {N_DO3, 8}, {N_SOL3, 8},
-};
-
-const MusicNote mel_bosque[] = {
-    {N_DO4, 2}, {N_MI4, 2}, {N_SOL4, 2}, {N_DO5, 4},
-    {N_SI4, 2}, {N_SOL4, 2}, {N_MI4, 4}, {N_SIL, 2},
-    {N_LA4, 2}, {N_DO5, 2}, {N_MI5, 4}, {N_RE5, 2},
-    {N_DO5, 2}, {N_LA4, 2}, {N_SOL4, 4}, {N_SIL, 2},
-    {N_FA4, 2}, {N_LA4, 2}, {N_DO5, 4}, {N_SI4, 2},
-    {N_LA4, 2}, {N_SOL4, 2}, {N_FA4, 4}, {N_SIL, 2},
-    {N_SOL4, 2}, {N_MI4, 2}, {N_DO4, 4}, {N_RE4, 2},
-    {N_MI4, 2}, {N_FA4, 2}, {N_SOL4, 8}, {N_SIL, 4},
-};
-const MusicNote baj_bosque[] = {
-    {N_DO3, 4}, {N_DO3, 4}, {N_SOL3, 4}, {N_SOL3, 4},
-    {N_LA3, 4}, {N_LA3, 4}, {N_FA3, 4}, {N_FA3, 4},
-    {N_DO3, 4}, {N_DO3, 4}, {N_SOL3, 4}, {N_SOL3, 4},
-    {N_DO3, 8}, {N_SOL3, 8},
-};
-
-const MusicNote mel_volcan[] = {
-    {N_LA3, 2}, {N_DO4, 2}, {N_MI4, 4}, {N_RE4, 2},
-    {N_DO4, 2}, {N_LA3, 4}, {N_SIL, 2}, {N_SI3, 2},
-    {N_DO4, 4}, {N_RE4, 2}, {N_MI4, 4}, {N_SIL, 2},
-    {N_FA4, 2}, {N_MI4, 2}, {N_RE4, 4}, {N_DO4, 2},
-    {N_LA3, 2}, {N_SI3, 2}, {N_DO4, 8}, {N_SIL, 4},
-};
-const MusicNote baj_volcan[] = {
-    {N_LA3, 4}, {N_LA3, 4}, {N_FA3, 4}, {N_FA3, 4},
-    {N_SOL3, 4}, {N_SOL3, 4}, {N_MI3, 4}, {N_MI3, 4},
-    {N_LA3, 8}, {N_FA3, 8},
-};
-
-const MusicNote mel_marino[] = {
-    {N_SOL3, 4}, {N_SI3, 4}, {N_RE4, 4}, {N_DO4, 4},
-    {N_SI3, 4}, {N_LA3, 4}, {N_SOL3, 8},
-    {N_FA3, 4}, {N_LA3, 4}, {N_DO4, 4}, {N_SI3, 4},
-    {N_LA3, 4}, {N_SOL3, 4}, {N_FA3, 8},
-};
-const MusicNote baj_marino[] = {
-    {N_DO3, 8}, {N_FA3, 8}, {N_SOL3, 8}, {N_DO3, 8},
-    {N_FA3, 8}, {N_SOL3, 8}, {N_DO3, 8}, {N_FA3, 8},
-};
-
-const MusicNote mel_celeste[] = {
-    {N_DO5, 4}, {N_SOL4, 4}, {N_MI4, 4}, {N_DO4, 4},
-    {N_RE4, 4}, {N_FA4, 4}, {N_LA4, 8},
-    {N_SI4, 4}, {N_SOL4, 4}, {N_MI4, 4}, {N_DO4, 4},
-    {N_RE4, 4}, {N_FA4, 4}, {N_SOL4, 8},
-};
-const MusicNote baj_celeste[] = {
-    {N_DO3, 8}, {N_SOL3, 8}, {N_LA3, 8}, {N_FA3, 8},
-    {N_DO3, 8}, {N_SOL3, 8}, {N_FA3, 8}, {N_DO3, 8},
-};
-
-const MusicNote mel_gameover[] = {
-    {N_LA4, 4}, {N_SI4, 4}, {N_DO5, 8}, {N_SIL, 2},
-    {N_SI4, 4}, {N_LA4, 4}, {N_SOL4, 8}, {N_SIL, 2},
-    {N_FA4, 4}, {N_MI4, 4}, {N_RE4, 8}, {N_SIL, 2},
-    {N_DO4, 4}, {N_RE4, 4}, {N_MI4, 16}, {N_SIL, 8},
-};
-const MusicNote baj_gameover[] = {
-    {N_LA3, 8}, {N_LA3, 8}, {N_FA3, 8}, {N_FA3, 8},
-    {N_DO3, 8}, {N_DO3, 8}, {N_SOL3, 16}, {N_SIL, 8},
-};
-
-const MusicNote mel_victoria[] = {
-    {N_DO4, 2}, {N_MI4, 2}, {N_SOL4, 2}, {N_DO5, 4},
-    {N_SOL4, 2}, {N_MI4, 2}, {N_DO4, 4}, {N_SIL, 2},
-    {N_FA4, 2}, {N_LA4, 2}, {N_DO5, 4}, {N_FA5, 4},
-    {N_MI5, 2}, {N_DO5, 2}, {N_LA4, 4}, {N_SIL, 2},
-    {N_SOL4, 2}, {N_SI4, 2}, {N_RE5, 4}, {N_SOL5, 8},
-    {N_DO5, 16}, {N_SIL, 8},
-};
-const MusicNote baj_victoria[] = {
-    {N_DO3, 4}, {N_SOL3, 4}, {N_DO3, 4}, {N_SOL3, 4},
-    {N_FA3, 4}, {N_DO3, 4}, {N_FA3, 4}, {N_DO3, 4},
-    {N_SOL3, 4}, {N_RE3, 4}, {N_SOL3, 8}, {N_DO3, 16},
-};
 
 typedef struct {
     s16 x;
@@ -337,223 +191,67 @@ void texto_animado(const char* texto, u16 x, u16 y, u16 velocidad) {
     }
 }
 
-// ===== FUNCIONES DE MÚSICA =====
-void musica_iniciar(const MusicNote* melodia, u16 len_mel,
-                    const MusicNote* bajo, u16 len_baj,
-                    bool loop) {
-    mus_melodia.notas = melodia;
-    mus_melodia.longitud = len_mel;
-    mus_melodia.posicion = 0;
-    mus_melodia.contador = 0;
-    mus_melodia.canal = 0;
-    mus_melodia.activa = TRUE;
-    mus_melodia.loop = loop;
+// ===== SONIDO (fase 5): música FM y efectos PCM con el driver XGM2 de SGDK =====
+// Las pistas salen de tools/sound (MML original compilado con ctrmml) en el orden de resources.res
+enum { PISTA_TITULO, PISTA_MENU, PISTA_BOSQUE, PISTA_VOLCAN, PISTA_MARINO, PISTA_CELESTE,
+       PISTA_INTRO, PISTA_SUPERADA, PISTA_GAMEOVER, PISTA_VICTORIA, PISTA_CONTINUAR };
+static s16 pista_actual = -1;
 
-    mus_bajo.notas = bajo;
-    mus_bajo.longitud = len_baj;
-    mus_bajo.posicion = 0;
-    mus_bajo.contador = 0;
-    mus_bajo.canal = 1;
-    mus_bajo.activa = (bajo != NULL);
-    mus_bajo.loop = loop;
-
-    mus_tick_counter = 0;
-    mus_activa = TRUE;
+static void musica_pista(u16 pista) {
+    if (pista_actual == (s16)pista && XGM2_isPlaying()) return;
+    pista_actual = pista;
+    XGM2_playTrack(pista);
 }
 
-void musica_detener() {
-    mus_activa = FALSE;
-    mus_melodia.activa = FALSE;
-    mus_bajo.activa = FALSE;
-    PSG_setEnvelope(0, 15);
-    PSG_setEnvelope(1, 15);
-    PSG_setEnvelope(3, 15);
-}
-
-void musica_pausar() {
-    mus_activa = FALSE;
-    PSG_setEnvelope(0, 15);
-    PSG_setEnvelope(1, 15);
-}
-
-void musica_reanudar() {
-    mus_activa = TRUE;
-}
-
-void musica_actualizar() {
-    if (!mus_activa) return;
-
-    mus_tick_counter++;
-    if (mus_tick_counter < mus_tempo) return;
-    mus_tick_counter = 0;
-
-    if (mus_melodia.activa) {
-        if (mus_melodia.contador == 0) {
-            if (mus_melodia.posicion >= mus_melodia.longitud) {
-                if (mus_melodia.loop) {
-                    mus_melodia.posicion = 0;
-                } else {
-                    mus_melodia.activa = FALSE;
-                    PSG_setEnvelope(mus_melodia.canal, 15);
-                    return;
-                }
-            }
-            MusicNote n = mus_melodia.notas[mus_melodia.posicion];
-            mus_melodia.contador = n.dur;
-            if (n.tono == N_SIL) {
-                PSG_setEnvelope(mus_melodia.canal, 15);
-            } else {
-                PSG_setTone(mus_melodia.canal, n.tono);
-                PSG_setEnvelope(mus_melodia.canal, mus_volumen_melodia);
-            }
-            mus_melodia.posicion++;
-        } else {
-            mus_melodia.contador--;
-            if (mus_melodia.contador == 1) {
-                u8 de_vol = mus_volumen_melodia + 2;
-                if (de_vol > 15) de_vol = 15;
-                PSG_setEnvelope(mus_melodia.canal, de_vol);
-            }
-        }
-    }
-
-    if (mus_bajo.activa) {
-        if (mus_bajo.contador == 0) {
-            if (mus_bajo.posicion >= mus_bajo.longitud) {
-                if (mus_bajo.loop) {
-                    mus_bajo.posicion = 0;
-                } else {
-                    mus_bajo.activa = FALSE;
-                    PSG_setEnvelope(mus_bajo.canal, 15);
-                    return;
-                }
-            }
-            MusicNote n = mus_bajo.notas[mus_bajo.posicion];
-            mus_bajo.contador = n.dur;
-            if (n.tono == N_SIL) {
-                PSG_setEnvelope(mus_bajo.canal, 15);
-            } else {
-                PSG_setTone(mus_bajo.canal, n.tono);
-                PSG_setEnvelope(mus_bajo.canal, mus_volumen_bajo);
-            }
-            mus_bajo.posicion++;
-        } else {
-            mus_bajo.contador--;
-        }
-    }
-}
+void musica_detener() { XGM2_stop(); pista_actual = -1; }
+void musica_pausar()  { XGM2_pause(); }
+void musica_reanudar(){ XGM2_resume(); }
+void musica_actualizar() {}
 
 void musica_segun_estado(u8 estado) {
     switch (estado) {
-        case ESTADO_TITULO:
-            mus_tempo = 7;
-            musica_iniciar(mel_titulo, sizeof(mel_titulo)/sizeof(MusicNote),
-                           baj_titulo, sizeof(baj_titulo)/sizeof(MusicNote), TRUE);
-            break;
+        case ESTADO_TITULO:      musica_pista(PISTA_TITULO); break;
         case ESTADO_MENU:
         case ESTADO_MENU_VERSUS:
-            mus_tempo = 6;
-            musica_iniciar(mel_menu, sizeof(mel_menu)/sizeof(MusicNote),
-                           baj_menu, sizeof(baj_menu)/sizeof(MusicNote), TRUE);
-            break;
-        case ESTADO_INTRO:
-        case ESTADO_COMO_JUGAR:
-            musica_pausar();
-            break;
+        case ESTADO_COMO_JUGAR:  musica_pista(PISTA_MENU); break;
+        case ESTADO_INTRO:       pista_actual = -1; musica_pista(PISTA_INTRO); break;
         case ESTADO_JUEGO:
-            mus_tempo = 4;
-            switch (mundo_actual) {
-                case MUNDO_BOSQUE:
-                    musica_iniciar(mel_bosque, sizeof(mel_bosque)/sizeof(MusicNote),
-                                   baj_bosque, sizeof(baj_bosque)/sizeof(MusicNote), TRUE);
-                    break;
-                case MUNDO_VOLCAN:
-                    musica_iniciar(mel_volcan, sizeof(mel_volcan)/sizeof(MusicNote),
-                                   baj_volcan, sizeof(baj_volcan)/sizeof(MusicNote), TRUE);
-                    break;
-                case MUNDO_MARINO:
-                    musica_iniciar(mel_marino, sizeof(mel_marino)/sizeof(MusicNote),
-                                   baj_marino, sizeof(baj_marino)/sizeof(MusicNote), TRUE);
-                    break;
-                case MUNDO_CELESTE:
-                    musica_iniciar(mel_celeste, sizeof(mel_celeste)/sizeof(MusicNote),
-                                   baj_celeste, sizeof(baj_celeste)/sizeof(MusicNote), TRUE);
-                    break;
-            }
+            musica_pista(mundo_actual == MUNDO_VOLCAN ? PISTA_VOLCAN : mundo_actual == MUNDO_MARINO ? PISTA_MARINO :
+                         mundo_actual == MUNDO_CELESTE ? PISTA_CELESTE : PISTA_BOSQUE);
             break;
-        case ESTADO_GAMEOVER:
-            mus_tempo = 10;
-            musica_iniciar(mel_gameover, sizeof(mel_gameover)/sizeof(MusicNote),
-                           baj_gameover, sizeof(baj_gameover)/sizeof(MusicNote), FALSE);
-            break;
-        case ESTADO_FINJUEGO:
-            mus_tempo = 5;
-            musica_iniciar(mel_victoria, sizeof(mel_victoria)/sizeof(MusicNote),
-                           baj_victoria, sizeof(baj_victoria)/sizeof(MusicNote), FALSE);
-            break;
-        case ESTADO_CONTINUE:
-            musica_pausar();
-            break;
+        case ESTADO_GAMEOVER:    pista_actual = -1; musica_pista(PISTA_GAMEOVER); break;
+        case ESTADO_FINJUEGO:    musica_pista(PISTA_VICTORIA); break;
+        case ESTADO_CONTINUE:    musica_pista(PISTA_CONTINUAR); break;
     }
 }
 
-// ===== EFECTOS DE SONIDO (CANAL 2) =====
-void playMenuClickSound() { 
-    PSG_setTone(2, 650); 
-    PSG_setEnvelope(2, 2); 
-    timer_audio_menu = 4;
-}
-
-void playTimeAlertSound() {
-    PSG_setTone(2, 1150);
-    PSG_setEnvelope(2, 2);
-    timer_sonido_recogida = 3;
-}
-
-void reproducir_sonido_waka() {
-    PSG_setTone(2, 500);
-    PSG_setEnvelope(2, 2);
-    timer_sonido_recogida = 4;
-}
-
+// Efectos: canal PCM 2 (el 1 lo usa la batería de la música); los avisos importantes van con prioridad
+#define SFX(nombre, canal, prio) XGM2_playPCMEx(nombre, sizeof(nombre), canal, prio, FALSE, FALSE)
+void playMenuClickSound()            { SFX(sfx_click, SOUND_PCM_CH2, 0); }
+void playTimeAlertSound()            { SFX(sfx_alerta, SOUND_PCM_CH3, 0); }
+void reproducir_sonido_waka()        { SFX(sfx_pio, SOUND_PCM_CH2, 0); }
 void reproducir_sonido_deposito(u16 n) {
-    u16 f[] = {580, 680, 800, 950, 1200};
-    PSG_setTone(2, f[n > 4 ? 4 : n]);
-    PSG_setEnvelope(2, 2);
-    timer_sonido_deposito = 6;
+    switch (n % 5) {
+        case 0: SFX(sfx_nido0, SOUND_PCM_CH2, 1); break;
+        case 1: SFX(sfx_nido1, SOUND_PCM_CH2, 1); break;
+        case 2: SFX(sfx_nido2, SOUND_PCM_CH2, 1); break;
+        case 3: SFX(sfx_nido3, SOUND_PCM_CH2, 1); break;
+        default: SFX(sfx_nido4, SOUND_PCM_CH2, 1); break;
+    }
 }
-
+// Se mantiene la firma antigua (el "tono" identifica el efecto)
 void reproducir_sonido_item(u16 tono) {
-    PSG_setTone(2, tono);
-    PSG_setEnvelope(2, 1);
-    timer_sonido_recogida = 8;
+    if (tono == 1400)      SFX(sfx_gema, SOUND_PCM_CH2, 0);
+    else if (tono == 220)  SFX(sfx_reloj, SOUND_PCM_CH2, 0);
+    else if (tono == 900)  SFX(sfx_rayo, SOUND_PCM_CH2, 0);
+    else if (tono == 1500) SFX(sfx_meta, SOUND_PCM_CH3, 1);
+    else if (tono == 180)  SFX(sfx_cierre, SOUND_PCM_CH3, 1);
+    else                   SFX(sfx_click, SOUND_PCM_CH2, 0);
 }
-
-// ===== SONIDO DE PÁNICO (descendente) =====
-void reproducir_sonido_panico() {
-    PSG_setTone(2, 800);
-    PSG_setEnvelope(2, 1);
-    timer_sonido_panico = 20;
-}
-
-void procesar_silencio_psg() {
-    if (timer_sonido_panico > 0) {
-        timer_sonido_panico--;
-        u16 tono = 800 - (u16)(20 - timer_sonido_panico) * 25;
-        if (tono < 300) tono = 300;
-        PSG_setTone(2, tono);
-        if (timer_sonido_panico == 0) PSG_setEnvelope(2, 15);
-    }
-    else if (timer_sonido_recogida > 0) { 
-        timer_sonido_recogida--; 
-        if (timer_sonido_recogida == 2) PSG_setTone(2, 650); 
-        if (timer_sonido_recogida == 0) PSG_setEnvelope(2, 15); 
-    }
-    if (timer_sonido_deposito > 0) { 
-        timer_sonido_deposito--; 
-        if (timer_sonido_deposito == 0) PSG_setEnvelope(2, 15); 
-    }
-}
+void reproducir_sonido_panico()      { SFX(sfx_panico, SOUND_PCM_CH3, 1); }
+void sonido_atrapado()               { SFX(sfx_atrapado, SOUND_PCM_CH3, 1); }
+void sonido_rabia()                  { SFX(sfx_rabia, SOUND_PCM_CH3, 1); }
+void procesar_silencio_psg() {}
 
 // ===== DECLARACIONES DE FUNCIONES =====
 bool en_zona_nido(s16 tx, s16 ty);
@@ -853,9 +551,9 @@ int main(bool hard) {
     SYS_enableInts();
     SPR_init();
 
-    for(u8 i = 0; i < 4; i++) {
-        PSG_setEnvelope(i, 15);
-    }
+    // driver de sonido XGM2: todas las canciones en un único bloque (comparten muestras PCM)
+    XGM2_loadDriver(TRUE);
+    XGM2_load(musica);
 
     JOY_init();
 
@@ -874,10 +572,6 @@ int main(bool hard) {
         u16 joy = JOY_readJoypad(JOY_1);
         static bool boton_pulsado = FALSE;
 
-        if (timer_audio_menu > 0) {
-            timer_audio_menu--;
-            if (timer_audio_menu == 0) PSG_setEnvelope(2, 15);
-        }
 
         if (estado_actual == ESTADO_TITULO) {
             if (joy & BUTTON_START) {
@@ -1232,7 +926,6 @@ void mostrar_menu_versus() {
 }
 
 void mostrar_intro_mundo_actual() {
-    for(u8 i = 0; i < 4; i++) PSG_setEnvelope(i, 15);
     const Image* img = &bg_intro_bosque;
     const SpriteDefinition* enemigo = &hunter_sprite;
     if (mundo_actual == MUNDO_VOLCAN)       { img = &bg_intro_volcan;    enemigo = &flame_sprite; }
@@ -1408,7 +1101,6 @@ void mostrar_enhorabuena() {
     VDP_clearPlane(BG_A, TRUE);
     VDP_clearPlane(BG_B, TRUE);
 
-    for(u8 i = 0; i < 4; i++) PSG_setEnvelope(i, 15);
 
     pantalla_imagen(&bg_fin_juego);
     VDP_loadFont(&ts_font, DMA);
@@ -1441,7 +1133,6 @@ void verificar_fin_ronda_versus(bool gano_pajaro) {
         VDP_clearPlane(BG_A, TRUE);
         VDP_clearPlane(BG_B, TRUE);
 
-        for(u8 i = 0; i < 4; i++) PSG_setEnvelope(i, 15);
 
         PAL_setPalette(PAL2, pal_items.data, CPU);
         if (victorias_pajaro >= versus_victorias_req) {
@@ -1813,7 +1504,7 @@ void actualizar_logica() {
                     if ((random() % 100) < 12) {
                         cazador_en_furia = TRUE;
                         timer_duracion_furia = 8; // Ampliado a 8 segundos
-                        playTimeAlertSound(); 
+                        sonido_rabia();
                         efecto_shake(15, 2);
                     }
                 } else {
@@ -1927,7 +1618,8 @@ void actualizar_logica() {
                 muros_alerta(FALSE);
                 cazador_en_furia = FALSE; timer_cazador_lento = 0; cazador_tinte_actualizar();
                 banner("FASE SUPERADA!");
-                secuencia_heroe(ANIM_FELIZ, 100, TRUE);
+                musica_detener(); XGM2_playTrack(PISTA_SUPERADA);
+                secuencia_heroe(ANIM_FELIZ, 150, TRUE);
                 if (modo_juego_seleccionada == 0) { 
                     fase_actual++;
                     if (fase_actual > 5) {
@@ -1955,10 +1647,8 @@ void actualizar_logica() {
                 } else { 
                     estado_actual = ESTADO_VICTORIA;
                     banner("HAS ESCAPADO CON EXITO!");
-                    PSG_setTone(2, 900);  PSG_setEnvelope(2, 2); waitMs(150);
-                    PSG_setTone(2, 1200); waitMs(150);
-                    PSG_setTone(2, 1500); waitMs(600);
-                    PSG_setEnvelope(2, 15);
+                    musica_detener(); XGM2_playTrack(PISTA_SUPERADA);
+                    for (u16 f = 0; f < 150; f++) { SPR_update(); SYS_doVBlankProcess(); }
                     finalizar_partida();
                     estado_actual = ESTADO_MENU; 
                     mostrar_menu_opciones(); 
@@ -2000,11 +1690,10 @@ void actualizar_logica() {
             victorias_cazador++;
             muros_alerta(TRUE);
             banner("LA RABIA TE DESTRUYO!");
-            PSG_setTone(2, 180); PSG_setEnvelope(2, 2);
+            musica_detener();
+            sonido_atrapado();
             SPR_setAnim(flicky.sprite, ANIM_HERIDO); flicky.anim_actual = ANIM_HERIDO; SPR_setHFlip(flicky.sprite, FALSE);
             for (u16 f = 0; f < 100; f++) {
-                if (f == 40) PSG_setTone(2, 100);
-                if (f == 70) PSG_setEnvelope(2, 15);
                 if (f < 30) efecto_shake_actualizar();
                 SPR_setFrame(flicky.sprite, (f >> 3) & 3);
                 SPR_setPosition(flicky.sprite, flicky.x + shake_x, flicky.y + PLAY_Y);
@@ -2037,11 +1726,10 @@ void actualizar_logica() {
             victorias_cazador++;
             muros_alerta(FALSE);
             banner("EL CAZADOR TE ATRAPO!");
-            PSG_setTone(2, 180); PSG_setEnvelope(2, 2);
+            musica_detener();
+            sonido_atrapado();
             SPR_setAnim(flicky.sprite, ANIM_HERIDO); flicky.anim_actual = ANIM_HERIDO; SPR_setHFlip(flicky.sprite, FALSE);
             for (u16 f = 0; f < 100; f++) {
-                if (f == 40) PSG_setTone(2, 100);
-                if (f == 70) PSG_setEnvelope(2, 15);
                 if (f < 30) efecto_shake_actualizar();
                 SPR_setFrame(flicky.sprite, (f >> 3) & 3);
                 SPR_setPosition(flicky.sprite, flicky.x + shake_x, flicky.y + PLAY_Y);
