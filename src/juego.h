@@ -97,12 +97,20 @@ extern u32 puntuacion_maxima, proximo_hito_vida;
 extern bool juego_pausado, cazador_en_furia, flicky_invulnerable, salida_abierta, en_jefe;
 extern s16 timer_duracion_furia, timer_invulnerabilidad;
 extern u16 modo_juego_seleccionada, mundo_actual, fase_actual, modo_jugadores;
-extern u32 total_partidas, victorias_pajaro, victorias_cazador;
+extern u32 total_partidas, victorias_j1, victorias_j2;
 extern u16 multiplicador_velocidad_minuto;
 extern bool modo_battle_royale, en_preaviso_cierre;
 extern u16 anillo_recorte;
 extern u16 versus_sel, versus_tiempo_idx, versus_victorias_req, versus_mundo_idx;
 extern bool historia_desde_menu;
+// versus: los papeles se alternan cada ronda; el battle royale solo existe en este modo
+extern bool p1_es_pajaro, ganador_fue_pajaro;
+extern u16 versus_ronda;
+extern s16 timer_enredado, timer_flicky_lento, timer_cazador_rapido;
+#define VICTORIAS_PARA_GANAR ((u32)((versus_victorias_req + 1) / 2))   // al mejor de 3 = gana quien llega a 2
+#define BR_ACTIVO (modo_battle_royale && modo_jugadores == 1)
+#define ENREDO_FRAMES 40
+#define RECARGA_RED   240
 
 // ---------------------------------------------------------------- sonido.c
 enum { PISTA_TITULO, PISTA_MENU, PISTA_BOSQUE, PISTA_VOLCAN, PISTA_MARINO, PISTA_CELESTE,
@@ -175,6 +183,9 @@ void jugador_actualizar();
 void jugador_animar();
 void jugador_golpeado();
 void dispersar_polluelos();
+bool polluelo_volar(s16 sx, s16 sy);
+void jugador_enredar();
+u16 municion_max();
 void polluelos_voladores_actualizar();
 void polluelos_reset();
 void secuencia_heroe(u8 anim, u16 frames, bool salta);
@@ -190,7 +201,7 @@ enum { DISPARO_RED, DISPARO_FUEGO, DISPARO_BOLA };
 
 // ---------------------------------------------------------------- enemigo.c
 void cazador_crear(s16 cx, s16 cy);
-void cazador_entrada_humana(u16 joy2);
+void cazador_entrada_humana(u16 joy2, u16 pulsado2);
 void cazador_actualizar();
 void cazador_aturdir();
 bool cazador_peligroso();

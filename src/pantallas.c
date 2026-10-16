@@ -154,8 +154,10 @@ void mostrar_menu_opciones() {
 
     sprintf(buf, T("PARTIDAS %-5ld   RECORD %06ld", "GAMES %-5ld      RECORD %06ld"), total_partidas, puntuacion_maxima);
     menu_texto(buf, 3, 6, PAL3);
-    sprintf(buf, T("VICTORIAS  PAJARO %ld  CAZADOR %ld", "WINS       BIRD %ld  HUNTER %ld"), victorias_pajaro, victorias_cazador);
-    menu_texto(buf, 3, 7, PAL3);
+    if (victorias_j1 + victorias_j2 > 0) {
+        sprintf(buf, T("ULTIMO VERSUS   J1 %ld - %ld J2", "LAST VERSUS     P1 %ld - %ld P2"), victorias_j1, victorias_j2);
+        menu_texto(buf, 3, 7, PAL3);
+    }
 
     menu_texto(T("JUGADORES", "PLAYERS"), 3, 9, PAL1);  menu_texto(T("IZQ/DER", "LEFT/RIGHT"), T(30, 27), 9, PAL3);
     menu_opcion(T("1 JUGADOR CONTRA LA CPU", "1 PLAYER VS THE CPU"), 4, 10, modo_jugadores == 0);
@@ -165,13 +167,11 @@ void mostrar_menu_opciones() {
     menu_opcion(T("HISTORIA  4 MUNDOS x 6 FASES", "STORY     4 WORLDS x 6 STAGES"), 4, 14, modo_juego_seleccionada == 0);
     menu_opcion(T("LIBRE     UN MAPA AL AZAR", "FREE      ONE RANDOM MAZE"), 4, 15, modo_juego_seleccionada == 1);
 
-    menu_texto("BATTLE ROYALE", 3, 17, PAL1);            menu_texto("C", 36, 17, PAL3);
-    menu_opcion(modo_battle_royale ? T("ACTIVADO", "ON") : T("DESACTIVADO", "OFF"), 4, 18, TRUE);
-
-    menu_texto(T("DIFICULTAD", "DIFFICULTY"), 3, 20, PAL1); menu_texto(T("ARR/ABA", "UP/DOWN"), 30, 20, PAL3);
-    menu_opcion(T("FACIL    2 MIN   5 POLLUELOS", "EASY     2 MIN   5 CHICKS"), 4, 21, d_sel == 0);
-    menu_opcion(T("MEDIO    3 MIN  10 POLLUELOS", "NORMAL   3 MIN  10 CHICKS"), 4, 22, d_sel == 1);
-    menu_opcion(T("DIFICIL  5 MIN  15 POLLUELOS", "HARD     5 MIN  15 CHICKS"), 4, 23, d_sel == 2);
+    menu_texto(T("DIFICULTAD", "DIFFICULTY"), 3, 18, PAL1); menu_texto(T("ARR/ABA", "UP/DOWN"), 30, 18, PAL3);
+    menu_opcion(T("FACIL    2 MIN   5 POLLUELOS", "EASY     2 MIN   5 CHICKS"), 4, 19, d_sel == 0);
+    menu_opcion(T("MEDIO    3 MIN  10 POLLUELOS", "NORMAL   3 MIN  10 CHICKS"), 4, 20, d_sel == 1);
+    menu_opcion(T("DIFICIL  5 MIN  15 POLLUELOS", "HARD     5 MIN  15 CHICKS"), 4, 21, d_sel == 2);
+    if (modo_jugadores == 1) menu_texto(T("2 JUGADORES: OPCIONES TRAS START", "2 PLAYERS: OPTIONS AFTER START"), T(4, 5), 23, PAL3);
 
     menu_texto(T("START: JUGAR    MODE: IDIOMA", "START: PLAY    MODE: LANGUAGE"), T(7, 6), 25, PAL1);
 }
@@ -217,12 +217,12 @@ void mostrar_menu_versus() {
     menu_paletas(&bg_versus);
     musica_segun_estado(ESTADO_MENU_VERSUS);
 
-    menu_opcion(modo_battle_royale ? T("BATTLE ROYALE      SI", "BATTLE ROYALE      ON") : T("BATTLE ROYALE      NO", "BATTLE ROYALE      OFF"), 5, 7, versus_sel == 0);
+    menu_opcion(modo_battle_royale ? T("BATTLE ROYALE      SI", "BATTLE ROYALE      ON") : T("BATTLE ROYALE      NO", "BATTLE ROYALE      OFF"), 5, 6, versus_sel == 0);
     static const u16 segs[4] = { 60, 90, 120, 180 };
     sprintf(buf, T("TIEMPO DE RONDA    %d SEG", "ROUND TIME         %d SEC"), segs[versus_tiempo_idx]);
-    menu_opcion(buf, 5, 10, versus_sel == 1);
+    menu_opcion(buf, 5, 8, versus_sel == 1);
     sprintf(buf, T("AL MEJOR DE        %d", "BEST OF            %d"), versus_victorias_req);
-    menu_opcion(buf, 5, 13, versus_sel == 2);
+    menu_opcion(buf, 5, 10, versus_sel == 2);
     const char* nombre;
     switch (versus_mundo_idx) {
         case 0: nombre = T("BOSQUE", "FOREST"); break;
@@ -232,10 +232,12 @@ void mostrar_menu_versus() {
         default: nombre = T("AL AZAR", "RANDOM"); break;
     }
     sprintf(buf, T("ESCENARIO          %s", "STAGE              %s"), nombre);
-    menu_opcion(buf, 5, 16, versus_sel == 3);
-    menu_opcion(T("VOLVER AL MENU", "BACK TO MENU"), 5, 19, versus_sel == 4);
-    menu_texto(T("MANDO 1: PAJARO (A/B: HUEVO)", "PAD 1: BIRD (A/B: EGG)"), 5, 22, PAL3);
-    menu_texto(T("MANDO 2: CAZADOR", "PAD 2: HUNTER"), 5, 23, PAL3);
+    menu_opcion(buf, 5, 12, versus_sel == 3);
+    menu_opcion(T("VOLVER AL MENU", "BACK TO MENU"), 5, 14, versus_sel == 4);
+    menu_texto(T("RONDA 1:  J1 PAJARO  J2 CAZADOR", "ROUND 1:  P1 BIRD  P2 HUNTER"), 5, 17, PAL1);
+    menu_texto(T("LOS PAPELES CAMBIAN CADA RONDA", "ROLES SWAP EVERY ROUND"), 5, 19, PAL3);
+    menu_texto(T("PAJARO A/B: HUEVO  (ATURDE)", "BIRD A/B: EGG  (STUNS)"), 5, 21, PAL3);
+    menu_texto(T("CAZADOR A/B: RED  (ENREDA)", "HUNTER A/B: NET  (TANGLES)"), 5, 23, PAL3);
     menu_texto(T("PULSA START PARA EMPEZAR", "PRESS START TO BEGIN"), T(8, 10), 25, PAL1);
 }
 
@@ -382,20 +384,24 @@ void mostrar_enhorabuena() {
 
 void mostrar_ganador_versus() {
     PAL_setPalette(PAL2, pal_items.data, CPU);
-    if (victorias_pajaro >= versus_victorias_req) {
+    if (ganador_fue_pajaro) {                          // la imagen del papel con el que ganó el último punto
         pantalla_imagen(IMG(bg_pajaro_ganador));
         pantalla_sprite(&hero_sprite, 152, 150, PAL2, ANIM_FELIZ, 0, FALSE);
     } else {
         pantalla_imagen(IMG(bg_cazador_ganador));
-        PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
-        pantalla_sprite(&hunter_sprite, 148, 144, PAL3, ANIM_ABAJO, 0, FALSE);
+        const SpriteDefinition* def = enemigo_del_mundo();   // el enemigo del último escenario
+        PAL_setPalette(PAL3, def->palette->data, CPU);
+        pantalla_sprite(def, 148, 144, PAL3, ANIM_ABAJO, 0, FALSE);
     }
     PAL_setPalette(PAL2, pal_items.data, CPU);
     VDP_loadFont(&ts_font, DMA);
     VDP_setTextPalette(PAL0);
     char buf[40];
-    sprintf(buf, T("PAJARO %ld  -  %ld CAZADOR", "BIRD %ld  -  %ld HUNTER"), victorias_pajaro, victorias_cazador);
-    texto_centrado(buf, 12);
+    bool gana_j1 = victorias_j1 > victorias_j2;
+    sprintf(buf, T("GANA EL JUGADOR %d", "PLAYER %d WINS"), gana_j1 ? 1 : 2);
+    texto_centrado(buf, 11);
+    sprintf(buf, T("J1  %ld - %ld  J2", "P1  %ld - %ld  P2"), victorias_j1, victorias_j2);
+    texto_centrado(buf, 13);
     musica_segun_estado(ESTADO_FINJUEGO);
     titulo_parpadeo = TRUE;
 }

@@ -56,7 +56,7 @@ static void huevo_actualizar() {
 
 // ------------------------------------------------------------------ ataques de los jefes
 #define MAX_DISPAROS 12
-typedef struct { Sprite* s; u16 tipo; s16 x, y, vx, vy, vida; } Disparo;   // x, y, vx, vy en 1/16 px
+typedef struct { Sprite* s; u16 tipo; s16 x, y, vx, vy, vida; bool pegado; } Disparo;   // x, y, vx, vy en 1/16 px
 static Disparo disparos[MAX_DISPAROS];
 
 void disparo_jefe(u16 tipo, s16 x, s16 y, s16 vx, s16 vy, s16 vida) {
@@ -66,6 +66,7 @@ void disparo_jefe(u16 tipo, s16 x, s16 y, s16 vx, s16 vy, s16 vida) {
         d->s = SPR_addSprite(&proyectil_sprite, x + shake_x, y + PLAY_Y, TILE_ATTR(PAL2, 1, FALSE, FALSE));
         if (!d->s) return;
         SPR_setAnim(d->s, tipo);
+        d->pegado = FALSE;
         d->tipo = tipo; d->x = x << 4; d->y = y << 4; d->vx = vx; d->vy = vy; d->vida = vida;
         return;
     }
@@ -85,6 +86,11 @@ void proyectiles_actualizar() {
     for (u16 i = 0; i < MAX_DISPAROS; i++) {
         Disparo* d = &disparos[i];
         if (!d->s) continue;
+        if (d->pegado) {                               // red enganchada a Flicki mientras dura el enredo
+            if (timer_enredado <= 0) { SPR_releaseSprite(d->s); d->s = NULL; continue; }
+            SPR_setPosition(d->s, flicky.x + shake_x, flicky.y + PLAY_Y + ((frame_counter & 8) ? 1 : 0));
+            continue;
+        }
         d->x += d->vx; d->y += d->vy;
         s16 px = d->x >> 4, py = d->y >> 4;
         bool fin = (--d->vida <= 0);
@@ -93,6 +99,14 @@ void proyectiles_actualizar() {
         SPR_setPosition(d->s, px + shake_x, py + PLAY_Y);
         // las llamas se apagan parpadeando
         if (d->tipo == DISPARO_FUEGO && d->vida < 40) SPR_setVisibility(d->s, (d->vida & 4) ? HIDDEN : VISIBLE);
+        if (modo_jugadores == 1) {                     // versus: la red enreda, no mata
+            if (!flicky_invulnerable && timer_enredado == 0 && abs(px - flicky.x) < 10 && abs(py - flicky.y) < 10) {
+                jugador_enredar();
+                d->pegado = TRUE;
+                SPR_setDepth(d->s, SPR_MIN_DEPTH);
+            }
+            continue;
+        }
         if (!flicky_invulnerable && abs(px - flicky.x) < 11 && abs(py - flicky.y) < 11) {
             jugador_muere(T("EL JEFE TE ALCANZO!", "THE BOSS GOT YOU!"));
             return;

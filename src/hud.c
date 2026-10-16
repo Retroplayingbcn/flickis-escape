@@ -42,7 +42,7 @@ void hud_mensaje(const char* txt) {
 
 // Distribución (40 columnas):
 //   un jugador: [1-1] [huevo x3] [puntos] [reloj 3:00] [polluelo 00/10 | barra del jefe] [cara x1]
-//   versus:     [P1 n] [P2 n] [huevo x3] [reloj 3:00]
+//   versus:     [J1 n] [J2 n] [huevo x2] [reloj 3:00] [polluelo 00/10]
 void hud_actualizar() {
     char buf[20];
     bool total = (cache_tiempo == 0xFFFF);
@@ -54,11 +54,11 @@ void hud_actualizar() {
         hud_icono(ITEM_RELOJ, col_reloj);
     }
     if (modo_jugadores == 1) {
-        if (total) { hud_texto("P1", 0); hud_texto("P2", 5); }
-        if (cache_puntos != (u32)(victorias_pajaro * 100 + victorias_cazador)) {
-            cache_puntos = victorias_pajaro * 100 + victorias_cazador;
-            sprintf(buf, "%d", (u16)victorias_pajaro);  hud_texto(buf, 3);
-            sprintf(buf, "%d", (u16)victorias_cazador); hud_texto(buf, 8);
+        if (total) { hud_texto(T("J1", "P1"), 0); hud_texto(T("J2", "P2"), 5); hud_icono(ITEM_POLLUELO, 23); }
+        if (cache_puntos != (u32)(victorias_j1 * 100 + victorias_j2)) {
+            cache_puntos = victorias_j1 * 100 + victorias_j2;
+            sprintf(buf, "%d", (u16)victorias_j1);  hud_texto(buf, 3);
+            sprintf(buf, "%d", (u16)victorias_j2); hud_texto(buf, 8);
         }
     } else {
         if (total) {
@@ -83,18 +83,19 @@ void hud_actualizar() {
                 cache_jefe = v;
                 for (s16 i = 0; i < vm && i < 12; i++) hud_texto(i < v ? "#" : "_", 23 + i);
             }
-        } else {
-            u8 parpadeo = salida_abierta ? ((frame_counter >> 4) & 1) : 0;
-            u16 huevos = total_salvados * 100 + max_polluelos_nivel;
-            if (cache_huevos != huevos || cache_parpadeo != parpadeo) {
-                cache_huevos = huevos; cache_parpadeo = parpadeo;
-                if (salida_abierta && parpadeo) hud_texto(T("META!", "GOAL!"), 25);
-                else { sprintf(buf, "%02d/%02d", total_salvados, max_polluelos_nivel); hud_texto(buf, 25); }
-            }
         }
         if (cache_vidas != (u16)vidas) {
             cache_vidas = vidas;
             sprintf(buf, "x%-2d", vidas); hud_texto(buf, 37);
+        }
+    }
+    if (!en_jefe) {
+        u8 parpadeo = salida_abierta ? ((frame_counter >> 4) & 1) : 0;
+        u16 huevos = total_salvados * 100 + max_polluelos_nivel;
+        if (cache_huevos != huevos || cache_parpadeo != parpadeo) {
+            cache_huevos = huevos; cache_parpadeo = parpadeo;
+            if (salida_abierta && parpadeo) hud_texto(T("META!", "GOAL!"), 25);
+            else { sprintf(buf, "%02d/%02d", total_salvados, max_polluelos_nivel); hud_texto(buf, 25); }
         }
     }
     if (cache_municion != municion) {
