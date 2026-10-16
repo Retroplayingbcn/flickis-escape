@@ -1,0 +1,56 @@
+#title Flicki's Escape - Boss
+#composer RetroPlayingBCN
+#platform megadrive
+
+; ---------------- original FM patches
+@1 fm ; picked bass
+	  3   0
+	 31   0  19   5   0  23   0   0   0   0
+	 31   6   0   4   3  19   0   0   0   0
+	 31  15   0   5   4  38   0   4   0   0
+	 31  27   0  11   1   0   0   1   0   0
+@2 fm ; bright lead
+	  4   5
+	 26   6   0   6   1  26   0   2   3   0
+	 24   5   2   7   2   0   0   1   0   0
+	 26   6   0   6   1  30   0   1   7   0
+	 24   5   2   7   2   6   0   1   0   0
+@3 fm ; bell / e-piano
+	  4   5
+	 31   8   0   6   2  32   0   7   0   0
+	 31  12   3   7   4   0   1   1   0   0
+	 31  10   0   6   2  38   0   1   3   0
+	 31  12   3   7   4   2   1   1   0   0
+@4 fm ; soft pad
+	  4   3
+	 16   4   0   6   2  38   0   1   3   0
+	 14   2   0   6   1   0   0   1   0   0
+	 16   4   0   6   2  40   0   2   7   0
+	 14   2   0   6   1   4   0   1   0   0
+@5 fm ; flute
+	  4   1
+	 20   0   0   7   0  46   0   1   0   0
+	 18   3   0   7   1   0   0   1   0   0
+	 20   0   0   7   0 127   0   1   0   0
+	 18   3   0   7   1 127   0   1   0   0
+@6 fm ; brass
+	  4   5
+	 20   5   0   6   1  24   0   1   0   0
+	 18   4   2   7   2   0   0   1   0   0
+	 20   5   0   6   1  28   0   1   3   0
+	 18   4   2   7   2   2   0   1   0   0
+@10 psg 11>6:10 / 5>0:20
+@11 psg 12>0:4
+@20 pcm "../pcm/kick.wav"
+@21 pcm "../pcm/snare.wav"
+@M1 0:24 | V0:0.18:6
+
+A t172
+A L @6 v13 M1 p3 o6e:12 o6e:12 o5b:12 o6e:12 o6g:12 o6f+:12 o6e:12 o5b:12 o6e:12 o6g:12 o6b:12 o6g:12 o6a:12 o6g:12 o6f+:12 o6e:12 o6c:12 o6e:12 o6g:12 o7c:12 o6b:12 o6g:12 o6e:24 o6d:12 o6f+:12 o6a:12 o7d:12 o7c:12 o6a:12 o6f+:24 o6e:12 o6e:12 o5b:12 o6e:12 o6g:12 o6f+:12 o6e:12 o5b:12 o6g:12 o6a:12 o6b:12 o7e:12 o7d:12 o6b:12 o6g:24 o7c:12 o6b:12 o6a:12 o6g:12 o6e:12 o6g:12 o7c:24 o6b:24 o6a:12 o6f+:12 o6d+:24 o5b:24 o5a:12 o6c:12 o6e:12 o6a:12 o6g:24 o6e:24 o5b:12 o6e:12 o6g:12 o6b:12 o6a:24 o6g:24 o6c:12 o6e:12 o6g:12 o6e:12 o7c:24 o6b:24 o6b:12 o6a:12 o6f+:12 o6d+:12 o5b:48 o6a:24 o7c:24 o7e:24 o7c:24 o6g:24 o6b:24 o7e:24 o6b:24 o7c:12 o6b:12 o6a:12 o6g:12 o7d:12 o7c:12 o6b:12 o6a:12 o6b:72 r:24
+B L @6 v8 p1 r:12 o6e:12 o6e:12 o5b:12 o6e:12 o6g:12 o6f+:12 o6e:12 o5b:12 o6e:12 o6g:12 o6b:12 o6g:12 o6a:12 o6g:12 o6f+:12 o6e:12 o6c:12 o6e:12 o6g:12 o7c:12 o6b:12 o6g:12 o6e:24 o6d:12 o6f+:12 o6a:12 o7d:12 o7c:12 o6a:12 o6f+:24 o6e:12 o6e:12 o5b:12 o6e:12 o6g:12 o6f+:12 o6e:12 o5b:12 o6g:12 o6a:12 o6b:12 o7e:12 o7d:12 o6b:12 o6g:24 o7c:12 o6b:12 o6a:12 o6g:12 o6e:12 o6g:12 o7c:24 o6b:24 o6a:12 o6f+:12 o6d+:24 o5b:24 o5a:12 o6c:12 o6e:12 o6a:12 o6g:24 o6e:24 o5b:12 o6e:12 o6g:12 o6b:12 o6a:24 o6g:24 o6c:12 o6e:12 o6g:12 o6e:12 o7c:24 o6b:24 o6b:12 o6a:12 o6f+:12 o6d+:12 o5b:48 o6a:24 o7c:24 o7e:24 o7c:24 o6g:24 o6b:24 o7e:24 o6b:24 o7c:12 o6b:12 o6a:12 o6g:12 o7d:12 o7c:12 o6b:12 o6a:12 o6b:72 r:12
+C L @4 v9 p2 o5g:96 o5g:96 o5e:96 o5f+:96 o5g:96 o5g:96 o5e:96 o5d+:96 o5c:96 o5g:96 o5e:96 o5d+:96 o5c:96 o5g:96 o5e:48 o5f+:48 o5d+:96
+D L @4 v9 p1 o4b:96 o4b:96 o5g:96 o4a:96 o4b:96 o4b:96 o5g:96 o5f+:96 o5e:96 o4b:96 o5g:96 o5f+:96 o5e:96 o4b:96 o5g:48 o4a:48 o5f+:96
+E L @1 v14 p3 o3e:12 o3e:12 o3e:12 o4e:12 o3e:12 o3e:12 o3e:12 o4e:12 o3e:12 o3e:12 o3e:12 o4e:12 o3e:12 o3e:12 o3e:12 o4e:12 o3c:12 o3c:12 o3c:12 o4c:12 o3c:12 o3c:12 o3c:12 o4c:12 o3d:12 o3d:12 o3d:12 o4d:12 o3d:12 o3d:12 o3d:12 o4d:12 o3e:12 o3e:12 o3e:12 o4e:12 o3e:12 o3e:12 o3e:12 o4e:12 o3e:12 o3e:12 o3e:12 o4e:12 o3e:12 o3e:12 o3e:12 o4e:12 o3c:12 o3c:12 o3c:12 o4c:12 o3c:12 o3c:12 o3c:12 o4c:12 o2b:12 o2b:12 o2b:12 o3b:12 o2b:12 o2b:12 o2b:12 o3b:12 o2a:12 o2a:12 o2a:12 o3a:12 o2a:12 o2a:12 o2a:12 o3a:12 o3e:12 o3e:12 o3e:12 o4e:12 o3e:12 o3e:12 o3e:12 o4e:12 o3c:12 o3c:12 o3c:12 o4c:12 o3c:12 o3c:12 o3c:12 o4c:12 o2b:12 o2b:12 o2b:12 o3b:12 o2b:12 o2b:12 o2b:12 o3b:12 o2a:12 o2a:12 o2a:12 o3a:12 o2a:12 o2a:12 o2a:12 o3a:12 o3e:12 o3e:12 o3e:12 o4e:12 o3e:12 o3e:12 o3e:12 o4e:12 o3c:12 o3c:12 o3c:12 o4c:12 o3d:12 o3d:12 o3d:12 o4d:12 o2b:12 o2b:12 o2b:12 o3b:12 o2b:12 o2b:12 o2b:12 o3b:12
+F L v15 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @20 c:6 r:6 @21 c:6 r:6 @20 c:6 r:6
+J L @11 v11 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6 o4c:6
+G L @10 v9 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6c:6 o6e:6 o6g:6 o7c:6 o6g:6 o6e:6 o6c:6 o6e:6 o6g:6 o7c:6 o6g:6 o6e:6 o6c:6 o6e:6 o6g:6 o7c:6 o6d:6 o6f+:6 o6a:6 o7d:6 o6a:6 o6f+:6 o6d:6 o6f+:6 o6a:6 o7d:6 o6a:6 o6f+:6 o6d:6 o6f+:6 o6a:6 o7d:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6c:6 o6e:6 o6g:6 o7c:6 o6g:6 o6e:6 o6c:6 o6e:6 o6g:6 o7c:6 o6g:6 o6e:6 o6c:6 o6e:6 o6g:6 o7c:6 o6b:6 o6d+:6 o6f+:6 o6a:6 o6f+:6 o6d+:6 o6b:6 o6d+:6 o6f+:6 o6a:6 o6f+:6 o6d+:6 o6b:6 o6d+:6 o6f+:6 o6a:6 o6a:6 o6c:6 o6e:6 o7a:6 o6e:6 o6c:6 o6a:6 o6c:6 o6e:6 o7a:6 o6e:6 o6c:6 o6a:6 o6c:6 o6e:6 o7a:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6c:6 o6e:6 o6g:6 o7c:6 o6g:6 o6e:6 o6c:6 o6e:6 o6g:6 o7c:6 o6g:6 o6e:6 o6c:6 o6e:6 o6g:6 o7c:6 o6b:6 o6d+:6 o6f+:6 o6a:6 o6f+:6 o6d+:6 o6b:6 o6d+:6 o6f+:6 o6a:6 o6f+:6 o6d+:6 o6b:6 o6d+:6 o6f+:6 o6a:6 o6a:6 o6c:6 o6e:6 o7a:6 o6e:6 o6c:6 o6a:6 o6c:6 o6e:6 o7a:6 o6e:6 o6c:6 o6a:6 o6c:6 o6e:6 o7a:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6b:6 o6g:6 o6e:6 o6g:6 o6b:6 o7e:6 o6c:6 o6e:6 o6g:6 o7c:6 o6g:6 o6e:6 o6c:6 o6e:6 o6d:6 o6f+:6 o6a:6 o7d:6 o6a:6 o6f+:6 o6d:6 o6f+:6 o6b:6 o6d+:6 o6f+:6 o6a:6 o6f+:6 o6d+:6 o6b:6 o6d+:6 o6f+:6 o6a:6 o6f+:6 o6d+:6 o6b:6 o6d+:6 o6f+:6 o6a:6

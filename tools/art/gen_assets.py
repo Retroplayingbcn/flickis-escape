@@ -140,10 +140,11 @@ def gen_world(name):
     for mask in range(16):
         tiles += metatile_to_tiles(lambda x, y, m=mask: wall_pixel(m, x, y, m, name))
     # nest: two metatiles (left/right) woven straw with eggs
-    def nest_px(x, y, side):
+    def nest_px(x, y, side, n):
         X = x + side*16 + 0.5; Y = y + 0.5
-        # eggs (3) sitting in the bowl, peeking above the rim
-        for ex, ey in ((10.5, 6.5), (16, 5.5), (21.5, 6.5)):
+        # eggs sitting in the bowl (0..3: the nest fills up as chicks come home)
+        eggs = {0: (), 1: ((16, 5.5),), 2: ((10.5, 6.5), (21.5, 6.5)), 3: ((10.5, 6.5), (16, 5.5), (21.5, 6.5))}[n]
+        for ex, ey in eggs:
             d = ((X-ex)/3.2)**2 + ((Y-ey)/3.8)**2
             if d < 1 and Y < 9.5:
                 if d > 0.72: return 13                     # egg outline/shade
@@ -159,8 +160,9 @@ def gen_world(name):
         k = (int(X) + int(Y)*2) % 5
         if Y < 9.5: return 6 if k else 7
         return 7 if k else (6 if Y < 12 else 8)
-    tiles += metatile_to_tiles(lambda x, y: nest_px(x, y, 0))
-    tiles += metatile_to_tiles(lambda x, y: nest_px(x, y, 1))
+    for n in range(4):                                     # metatiles 16..23: nest with n eggs (left, right)
+        tiles += metatile_to_tiles(lambda x, y, n=n: nest_px(x, y, 0, n))
+        tiles += metatile_to_tiles(lambda x, y, n=n: nest_px(x, y, 1, n))
     # HUD bar tiles: fill, bottom line
     tiles.append([[9]*8 for _ in range(8)])
     tiles.append([[9]*8 for _ in range(6)] + [[10]*8 for _ in range(2)])
@@ -199,12 +201,15 @@ BOLT  = ["................","........KKKK....",".......KYYYK....","......KYYYK..
 GEM   = ["................","................",".....KKKKKK.....","....KbWbbbbK....","...KbWbbbbbBK...","..KbbbbbbbbbBK..",
          "..KKKKKKKKKKKK..","..KBbbbWbbbBBK..","...KBbbWbbBBK...","....KBbbbBBK....",".....KBbBBK.....","......KBBK......",
          ".......KK.......","................","................","................"]
+EGG   = ["................","......KKKK......",".....KWWWWK.....","....KWWWWWWK....","...KWWWWWWWWK...","...KWCWWWWWWK...",
+         "..KWWCWWWWWWWK..","..KWWWWWWWWWcK..","..KWWWWWWWWWcK..","..KWWWWWWWWccK..","..KcWWWWWWWccK..","...KcWWWWWccK...",
+         "....KccccccK....",".....KKKKKK.....","................","................"]
 def art_tiles(art):
     return metatile_to_tiles(lambda x, y: idx_hero(art[y][x]))
 
 def gen_items():
     tiles = []
-    for art in (CHICK, CLOCK, BOLT, GEM, HV.SIDE):     # last = HUD life icon
+    for art in (CHICK, CLOCK, BOLT, GEM, HV.SIDE, EGG):     # 4 = HUD life icon, 5 = throwable egg
         tiles += art_tiles(art)
     save_indexed(os.path.join(OUT, 'items.png'), strip(tiles), 8, 8*len(tiles), HPAL)
 
@@ -372,13 +377,20 @@ def gen_font(opaque=False):
     save_indexed(os.path.join(OUT, 'font_menu.png' if opaque else 'font.png'), pix, W, H, pal)
 
 # ------------------------------------------------------------------ HUD FONT (8x16 cells, bar background baked in, PAL0)
-HUD_CHARS = " 0123456789:/-xABCDEFGHIJKLMNOPQRSTUVWXYZ!"
+HUD_CHARS = " 0123456789:/-xABCDEFGHIJKLMNOPQRSTUVWXYZ!#_+"
 def gen_hud():
     tiles_top, tiles_bot = [], []
     for ch in HUD_CHARS:
-        g = F.G.get(ch) or F.G.get(ch.upper()) or F.G[' ']
+        g = EXTRA_GLYPHS.get(ch) or F.G.get(ch) or F.G.get(ch.upper()) or F.G[' ']
         col = 11 if ch.isalpha() and ch != 'x' else 15
         cell = [[9]*8 for _ in range(14)] + [[10]*8 for _ in range(2)]
+        if ch in '#_':      # boss life bar segment: full (cream with white top) / empty (outline)
+            for y in range(4, 11):
+                for x in range(1, 7):
+                    if ch == '#': cell[y][x] = 15 if y == 4 else 11
+                    elif y in (4, 10) or x in (1, 6): cell[y][x] = 10
+            for x in range(1, 7): cell[11][x] = 14
+            tiles_top.append(cell[:8]); tiles_bot.append(cell[8:]); continue
         for y in range(7):
             for x in range(5):
                 if g[y][x] == '#': cell[5+y][x+2] = 14
@@ -393,7 +405,23 @@ def gen_hud():
     with open(os.path.join(ROOT, 'src', 'hud_chars.h'), 'w') as f:
         f.write('// generado por tools/art/gen_assets.py\n#define HUD_CHARS "%s"\n' % HUD_CHARS)
 
+def gen_fx():
+    import anim
+    font = dict(F.G); font.update(EXTRA_GLYPHS)
+    sheet(anim.egg_frames(), 16, 16, idx_hero, HPAL, os.path.join(OUT, 'huevo.png'))
+    sheet(anim.star_frames(), 24, 8, idx_hero, HPAL, os.path.join(OUT, 'estrellas.png'))
+    sheet(anim.popup_frames(font), 32, 8, idx_hero, HPAL, os.path.join(OUT, 'popup.png'))
+    sheet(anim.dust_frames(), 16, 16, idx_hero, HPAL, os.path.join(OUT, 'polvo.png'))
+    sheet(anim.projectile_frames(), 16, 16, idx_hero, HPAL, os.path.join(OUT, 'proyectil.png'))
+
+def gen_bosses():
+    # end-of-world bosses: the world enemy at double size (48x48)
+    for src, dst in (('hunter', 'jefe_cazador'), ('flame', 'jefe_llama'), ('shark', 'jefe_tiburon'), ('imp', 'jefe_diablillo')):
+        im = Image.open(os.path.join(OUT, src + '.png'))
+        big = im.resize((im.width * 2, im.height * 2), Image.NEAREST)
+        big.save(os.path.join(OUT, dst + '.png'))
+
 if __name__ == '__main__':
     for w in WORLDS: gen_world(w)
-    gen_items(); gen_hero(); gen_hunter(); gen_enemies(); gen_font(); gen_font(True); gen_hud()
+    gen_items(); gen_hero(); gen_hunter(); gen_enemies(); gen_font(); gen_font(True); gen_hud(); gen_fx(); gen_bosses()
     print('assets written to', OUT)

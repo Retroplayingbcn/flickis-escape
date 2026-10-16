@@ -21,7 +21,7 @@ Programar para hardware de 1989 (procesador Motorola 68000) impone severas restr
 Este repositorio demuestra cómo una IA puede comprender arquitecturas de hardware retro y diseñar código optimizado en C bajo el kit **SGDK**:
 
 *   **Físicas de colisión por tiles:** Rutinas de colisión píxel a píxel adaptadas a una rejilla de metatiles de 16x16.
-*   **Algoritmo BFS (Breadth-First Search):** Implementación de una búsqueda en anchura optimizada en memoria para que la CPU del cazador persiga al jugador de forma inteligente.
+*   **Algoritmo BFS (Breadth-First Search):** mapa de distancias por búsqueda en anchura para que el enemigo persiga al jugador; cada enemigo tiene su personalidad (la llama corre más, el tiburón embiste en línea recta y el diablillo se teletransporta).
 *   **Generación Procedimental:** Creación aleatoria de mapas garantizando que todos los elementos sean alcanzables mediante análisis topológico en tiempo real.
 
 ---
@@ -37,8 +37,12 @@ Este repositorio demuestra cómo una IA puede comprender arquitecturas de hardwa
     *   El idioma se elige al arrancar; también se cambia con MODE en el menú (mando de 6 botones).
     *   El idioma y el récord se guardan en la SRAM del cartucho.
 *   **Música FM y efectos PCM** originales, con el driver XGM2 de SGDK.
+*   **Efectos:** fundidos, marcador fijo con scroll por líneas, olas en el mar, lava y estrellas con ciclo de paleta, estrellitas al recibir un golpe, polluelos que salen volando, puntos flotantes, polvo y un nido que se va llenando.
 
-*   **Modo Historia:** 4 mundos temáticos (Bosque, Volcán, Mar y Cielo), cada uno con su escenario y su enemigo: cazador, llama, tiburón y diablillo.
+*   **Modo Historia:** 4 mundos temáticos (Bosque, Volcán, Mar y Cielo) de 6 fases, cada uno con su escenario y su enemigo: cazador, llama, tiburón y diablillo.
+*   **Jefes:** la sexta fase de cada mundo es un combate contra el enemigo gigante, con barra de vida, un ataque propio y música de jefe. Se le vence a huevazos.
+*   **Huevos:** con A o B lanzas un huevo que deja aturdido al enemigo 3 segundos y le corta la rabia. Llevas hasta 3 y aparecen por el mapa.
+*   **Vidas:** cada fase superada da una vida, y también cada 5000 puntos.
 *   **Modo Libre:** Generación procedural de laberintos jugables sobre la marcha.
 *   **Modo Versus (2 Jugadores):** Acción multijugador local en el que el segundo jugador controla directamente al cazador.
 *   **Mecánica de Dispersión:** Al recibir un golpe llevando polluelos, estos se esparcirán por el mapa y ganarás unos segundos de inmunidad para recuperarlos.
