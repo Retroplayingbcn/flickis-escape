@@ -1,8 +1,15 @@
 #include <genesis.h>
 #include "resources.h"
+#include "hud_chars.h"
 
-#define MAP_WIDTH   40
-#define MAP_HEIGHT  27  
+#define MAP_WIDTH   20
+#define MAP_HEIGHT  13
+// --- REJILLA DE 16x16 (rediseño 16 bits) ---
+#define CELDA        16
+#define CELDA_SHIFT  4
+#define CELDA_MASK   15
+#define PLAY_Y       16   // el marcador ocupa los 16 px superiores
+#define PLAY_TY      2    // fila de tiles donde empieza el laberinto
 
 // --- TILES DEL MAPA ---
 #define TILE_SUELO     0
@@ -15,12 +22,15 @@
 #define TILE_GFX_SUELO_B  7
 #define TILE_GFX_FLECHA    8
 
-#define FLICKY_DRAW_OFFSET   4
-#define CAZADOR_DRAW_OFFSET  8
+#define FLICKY_DRAW_OFFSET   0
+#define CAZADOR_DRAW_OFFSET  4
+#define CAZADOR_DRAW_OFFSET_Y 8
 
 #define ANIM_ABAJO  0
 #define ANIM_ARRIBA 1
 #define ANIM_LADO   2
+#define ANIM_HERIDO 3
+#define ANIM_FELIZ  4
 
 // --- ESTADOS DE JUEGO ---
 #define ESTADO_TITULO      0  
@@ -33,6 +43,13 @@
 #define ESTADO_FINJUEGO    5
 #define ESTADO_CONTINUE    6
 #define ESTADO_INTRO       7
+#define ESTADO_IDIOMA      10
+#define ESTADO_HISTORIA    11
+
+// ---- Idioma: 0 = castellano, 1 = inglés ----
+u16 idioma = 0;
+#define T(es, en) (idioma ? (en) : (es))
+#define IMG(nombre) (idioma ? &nombre##_en : &nombre)
 
 // --- DEFINICIONES DE MUNDOS ---
 #define MUNDO_BOSQUE  0
@@ -40,161 +57,17 @@
 #define MUNDO_MARINO  2
 #define MUNDO_CELESTE 3  
 
-#define MAX_HISTORIAL  128
+#define MAX_HISTORIAL  256
+#define HIST_MASK      255
+#define SEPARACION_POLLUELOS 12
 #define DURACION_PODER_FRAMES  300 
 
 // --- DURACIONES DE ESTADO TRAS DISPERSIÓN/RABIA ---
-#define TIEMPO_INVULNERABILIDAD_FRAMES 150  // ~2.5 segundos a 60fps[cite: 1]
-#define RADIO_DISPERSION 6  // Radio en tiles para dispersar polluelos[cite: 1]
+#define TIEMPO_INVULNERABILIDAD_FRAMES 150  // ~2.5 segundos a 60fps
+#define RADIO_DISPERSION 3  // Radio en celdas para dispersar polluelos
 
-// ===== SISTEMA DE MÚSICA DE FONDO =====
-#define N_SIL   0
-#define N_DO3   857
-#define N_RE3   764
-#define N_MI3   681
-#define N_FA3   642
-#define N_SOL3  572
-#define N_LA3   508
-#define N_SI3   453
-#define N_DO4   428
-#define N_RE4   381
-#define N_MI4   339
-#define N_FA4   320
-#define N_SOL4  285
-#define N_LA4   254
-#define N_SI4   226
-#define N_DO5   214
-#define N_RE5   190
-#define N_MI5   170
-#define N_FA5   160
-#define N_SOL5  143
+// (la música y los efectos van por el driver XGM2: ver "SONIDO" más abajo)
 
-typedef struct {
-    u16 tono;
-    u8  dur;
-} MusicNote;
-
-typedef struct {
-    const MusicNote* notas;
-    u16 longitud;
-    u16 posicion;
-    u16 contador;
-    u8  canal;
-    bool activa;
-    bool loop;
-} CanalMusica;
-
-CanalMusica mus_melodia;
-CanalMusica mus_bajo;
-u16 mus_tempo = 6;
-u16 mus_tick_counter = 0;
-bool mus_activa = FALSE;
-u8 mus_volumen_melodia = 7; 
-u8 mus_volumen_bajo = 9;   
-
-// --- MELODÍAS ---
-const MusicNote mel_titulo[] = {
-    {N_MI4, 2}, {N_SOL4, 2}, {N_LA4, 4}, {N_SOL4, 2},
-    {N_MI4, 2}, {N_RE4, 4}, {N_DO4, 2}, {N_RE4, 2},
-    {N_MI4, 8}, {N_SIL, 2},
-    {N_SOL4, 2}, {N_LA4, 2}, {N_SI4, 4}, {N_LA4, 2},
-    {N_SOL4, 2}, {N_MI4, 4}, {N_RE4, 2}, {N_MI4, 2},
-    {N_DO4, 8}, {N_SIL, 4},
-};
-const MusicNote baj_titulo[] = {
-    {N_DO3, 4}, {N_DO3, 4}, {N_SOL3, 4}, {N_SOL3, 4},
-    {N_LA3, 4}, {N_LA3, 4}, {N_FA3, 4}, {N_FA3, 4},
-    {N_DO3, 4}, {N_DO3, 4}, {N_SOL3, 4}, {N_SOL3, 4},
-    {N_DO3, 8}, {N_SOL3, 8},
-};
-
-const MusicNote mel_menu[] = {
-    {N_SOL4, 4}, {N_MI4, 4}, {N_DO4, 4}, {N_RE4, 4},
-    {N_MI4, 4}, {N_FA4, 4}, {N_SOL4, 8},
-    {N_LA4, 4}, {N_SOL4, 4}, {N_FA4, 4}, {N_MI4, 4},
-    {N_RE4, 4}, {N_DO4, 4}, {N_RE4, 8},
-};
-const MusicNote baj_menu[] = {
-    {N_DO3, 8}, {N_FA3, 8}, {N_SOL3, 8}, {N_DO3, 8},
-    {N_FA3, 8}, {N_SOL3, 8}, {N_DO3, 8}, {N_SOL3, 8},
-};
-
-const MusicNote mel_bosque[] = {
-    {N_DO4, 2}, {N_MI4, 2}, {N_SOL4, 2}, {N_DO5, 4},
-    {N_SI4, 2}, {N_SOL4, 2}, {N_MI4, 4}, {N_SIL, 2},
-    {N_LA4, 2}, {N_DO5, 2}, {N_MI5, 4}, {N_RE5, 2},
-    {N_DO5, 2}, {N_LA4, 2}, {N_SOL4, 4}, {N_SIL, 2},
-    {N_FA4, 2}, {N_LA4, 2}, {N_DO5, 4}, {N_SI4, 2},
-    {N_LA4, 2}, {N_SOL4, 2}, {N_FA4, 4}, {N_SIL, 2},
-    {N_SOL4, 2}, {N_MI4, 2}, {N_DO4, 4}, {N_RE4, 2},
-    {N_MI4, 2}, {N_FA4, 2}, {N_SOL4, 8}, {N_SIL, 4},
-};
-const MusicNote baj_bosque[] = {
-    {N_DO3, 4}, {N_DO3, 4}, {N_SOL3, 4}, {N_SOL3, 4},
-    {N_LA3, 4}, {N_LA3, 4}, {N_FA3, 4}, {N_FA3, 4},
-    {N_DO3, 4}, {N_DO3, 4}, {N_SOL3, 4}, {N_SOL3, 4},
-    {N_DO3, 8}, {N_SOL3, 8},
-};
-
-const MusicNote mel_volcan[] = {
-    {N_LA3, 2}, {N_DO4, 2}, {N_MI4, 4}, {N_RE4, 2},
-    {N_DO4, 2}, {N_LA3, 4}, {N_SIL, 2}, {N_SI3, 2},
-    {N_DO4, 4}, {N_RE4, 2}, {N_MI4, 4}, {N_SIL, 2},
-    {N_FA4, 2}, {N_MI4, 2}, {N_RE4, 4}, {N_DO4, 2},
-    {N_LA3, 2}, {N_SI3, 2}, {N_DO4, 8}, {N_SIL, 4},
-};
-const MusicNote baj_volcan[] = {
-    {N_LA3, 4}, {N_LA3, 4}, {N_FA3, 4}, {N_FA3, 4},
-    {N_SOL3, 4}, {N_SOL3, 4}, {N_MI3, 4}, {N_MI3, 4},
-    {N_LA3, 8}, {N_FA3, 8},
-};
-
-const MusicNote mel_marino[] = {
-    {N_SOL3, 4}, {N_SI3, 4}, {N_RE4, 4}, {N_DO4, 4},
-    {N_SI3, 4}, {N_LA3, 4}, {N_SOL3, 8},
-    {N_FA3, 4}, {N_LA3, 4}, {N_DO4, 4}, {N_SI3, 4},
-    {N_LA3, 4}, {N_SOL3, 4}, {N_FA3, 8},
-};
-const MusicNote baj_marino[] = {
-    {N_DO3, 8}, {N_FA3, 8}, {N_SOL3, 8}, {N_DO3, 8},
-    {N_FA3, 8}, {N_SOL3, 8}, {N_DO3, 8}, {N_FA3, 8},
-};
-
-const MusicNote mel_celeste[] = {
-    {N_DO5, 4}, {N_SOL4, 4}, {N_MI4, 4}, {N_DO4, 4},
-    {N_RE4, 4}, {N_FA4, 4}, {N_LA4, 8},
-    {N_SI4, 4}, {N_SOL4, 4}, {N_MI4, 4}, {N_DO4, 4},
-    {N_RE4, 4}, {N_FA4, 4}, {N_SOL4, 8},
-};
-const MusicNote baj_celeste[] = {
-    {N_DO3, 8}, {N_SOL3, 8}, {N_LA3, 8}, {N_FA3, 8},
-    {N_DO3, 8}, {N_SOL3, 8}, {N_FA3, 8}, {N_DO3, 8},
-};
-
-const MusicNote mel_gameover[] = {
-    {N_LA4, 4}, {N_SI4, 4}, {N_DO5, 8}, {N_SIL, 2},
-    {N_SI4, 4}, {N_LA4, 4}, {N_SOL4, 8}, {N_SIL, 2},
-    {N_FA4, 4}, {N_MI4, 4}, {N_RE4, 8}, {N_SIL, 2},
-    {N_DO4, 4}, {N_RE4, 4}, {N_MI4, 16}, {N_SIL, 8},
-};
-const MusicNote baj_gameover[] = {
-    {N_LA3, 8}, {N_LA3, 8}, {N_FA3, 8}, {N_FA3, 8},
-    {N_DO3, 8}, {N_DO3, 8}, {N_SOL3, 16}, {N_SIL, 8},
-};
-
-const MusicNote mel_victoria[] = {
-    {N_DO4, 2}, {N_MI4, 2}, {N_SOL4, 2}, {N_DO5, 4},
-    {N_SOL4, 2}, {N_MI4, 2}, {N_DO4, 4}, {N_SIL, 2},
-    {N_FA4, 2}, {N_LA4, 2}, {N_DO5, 4}, {N_FA5, 4},
-    {N_MI5, 2}, {N_DO5, 2}, {N_LA4, 4}, {N_SIL, 2},
-    {N_SOL4, 2}, {N_SI4, 2}, {N_RE5, 4}, {N_SOL5, 8},
-    {N_DO5, 16}, {N_SIL, 8},
-};
-const MusicNote baj_victoria[] = {
-    {N_DO3, 4}, {N_SOL3, 4}, {N_DO3, 4}, {N_SOL3, 4},
-    {N_FA3, 4}, {N_DO3, 4}, {N_FA3, 4}, {N_DO3, 4},
-    {N_SOL3, 4}, {N_RE3, 4}, {N_SOL3, 8}, {N_DO3, 16},
-};
 
 typedef struct {
     s16 x;
@@ -254,9 +127,9 @@ s16 timer_duracion_furia = 0;
 bool flicky_invulnerable = FALSE;
 s16 timer_invulnerabilidad = 0;
 
-#define NIDO_X 17
-#define NIDO_Y 12  
-#define NIDO_ANCHO 10
+#define NIDO_X 9
+#define NIDO_Y 6
+#define NIDO_ANCHO 2
 
 s16 posiciones_polluelos_x[15];
 s16 posiciones_polluelos_y[15];
@@ -302,10 +175,12 @@ void efecto_shake_actualizar() {
     if (shake_timer > 0) {
         shake_x = (random() % (shake_intensidad * 2 + 1)) - shake_intensidad;
         VDP_setHorizontalScroll(BG_A, shake_x);
+        VDP_setHorizontalScroll(BG_B, shake_x);
         shake_timer--;
     } else if (shake_x != 0) {
         shake_x = 0;
         VDP_setHorizontalScroll(BG_A, 0);
+        VDP_setHorizontalScroll(BG_B, 0);
     }
 }
 
@@ -323,226 +198,77 @@ void texto_animado(const char* texto, u16 x, u16 y, u16 velocidad) {
     }
 }
 
-// ===== FUNCIONES DE MÚSICA =====
-void musica_iniciar(const MusicNote* melodia, u16 len_mel,
-                    const MusicNote* bajo, u16 len_baj,
-                    bool loop) {
-    mus_melodia.notas = melodia;
-    mus_melodia.longitud = len_mel;
-    mus_melodia.posicion = 0;
-    mus_melodia.contador = 0;
-    mus_melodia.canal = 0;
-    mus_melodia.activa = TRUE;
-    mus_melodia.loop = loop;
+// ===== SONIDO (fase 5): música FM y efectos PCM con el driver XGM2 de SGDK =====
+// Las pistas salen de tools/sound (MML original compilado con ctrmml) en el orden de resources.res
+enum { PISTA_TITULO, PISTA_MENU, PISTA_BOSQUE, PISTA_VOLCAN, PISTA_MARINO, PISTA_CELESTE,
+       PISTA_INTRO, PISTA_SUPERADA, PISTA_GAMEOVER, PISTA_VICTORIA, PISTA_CONTINUAR };
+static s16 pista_actual = -1;
 
-    mus_bajo.notas = bajo;
-    mus_bajo.longitud = len_baj;
-    mus_bajo.posicion = 0;
-    mus_bajo.contador = 0;
-    mus_bajo.canal = 1;
-    mus_bajo.activa = (bajo != NULL);
-    mus_bajo.loop = loop;
-
-    mus_tick_counter = 0;
-    mus_activa = TRUE;
+static void musica_pista(u16 pista) {
+    if (pista_actual == (s16)pista && XGM2_isPlaying()) return;
+    pista_actual = pista;
+    XGM2_playTrack(pista);
 }
 
-void musica_detener() {
-    mus_activa = FALSE;
-    mus_melodia.activa = FALSE;
-    mus_bajo.activa = FALSE;
-    PSG_setEnvelope(0, 15);
-    PSG_setEnvelope(1, 15);
-    PSG_setEnvelope(3, 15);
-}
-
-void musica_pausar() {
-    mus_activa = FALSE;
-    PSG_setEnvelope(0, 15);
-    PSG_setEnvelope(1, 15);
-}
-
-void musica_reanudar() {
-    mus_activa = TRUE;
-}
-
-void musica_actualizar() {
-    if (!mus_activa) return;
-
-    mus_tick_counter++;
-    if (mus_tick_counter < mus_tempo) return;
-    mus_tick_counter = 0;
-
-    if (mus_melodia.activa) {
-        if (mus_melodia.contador == 0) {
-            if (mus_melodia.posicion >= mus_melodia.longitud) {
-                if (mus_melodia.loop) {
-                    mus_melodia.posicion = 0;
-                } else {
-                    mus_melodia.activa = FALSE;
-                    PSG_setEnvelope(mus_melodia.canal, 15);
-                    return;
-                }
-            }
-            MusicNote n = mus_melodia.notas[mus_melodia.posicion];
-            mus_melodia.contador = n.dur;
-            if (n.tono == N_SIL) {
-                PSG_setEnvelope(mus_melodia.canal, 15);
-            } else {
-                PSG_setTone(mus_melodia.canal, n.tono);
-                PSG_setEnvelope(mus_melodia.canal, mus_volumen_melodia);
-            }
-            mus_melodia.posicion++;
-        } else {
-            mus_melodia.contador--;
-            if (mus_melodia.contador == 1) {
-                u8 de_vol = mus_volumen_melodia + 2;
-                if (de_vol > 15) de_vol = 15;
-                PSG_setEnvelope(mus_melodia.canal, de_vol);
-            }
-        }
-    }
-
-    if (mus_bajo.activa) {
-        if (mus_bajo.contador == 0) {
-            if (mus_bajo.posicion >= mus_bajo.longitud) {
-                if (mus_bajo.loop) {
-                    mus_bajo.posicion = 0;
-                } else {
-                    mus_bajo.activa = FALSE;
-                    PSG_setEnvelope(mus_bajo.canal, 15);
-                    return;
-                }
-            }
-            MusicNote n = mus_bajo.notas[mus_bajo.posicion];
-            mus_bajo.contador = n.dur;
-            if (n.tono == N_SIL) {
-                PSG_setEnvelope(mus_bajo.canal, 15);
-            } else {
-                PSG_setTone(mus_bajo.canal, n.tono);
-                PSG_setEnvelope(mus_bajo.canal, mus_volumen_bajo);
-            }
-            mus_bajo.posicion++;
-        } else {
-            mus_bajo.contador--;
-        }
-    }
-}
+void musica_detener() { XGM2_stop(); pista_actual = -1; }
+void musica_pausar()  { XGM2_pause(); }
+void musica_reanudar(){ XGM2_resume(); }
+void musica_actualizar() {}
 
 void musica_segun_estado(u8 estado) {
     switch (estado) {
-        case ESTADO_TITULO:
-            mus_tempo = 7;
-            musica_iniciar(mel_titulo, sizeof(mel_titulo)/sizeof(MusicNote),
-                           baj_titulo, sizeof(baj_titulo)/sizeof(MusicNote), TRUE);
-            break;
+        case ESTADO_TITULO:      musica_pista(PISTA_TITULO); break;
         case ESTADO_MENU:
         case ESTADO_MENU_VERSUS:
-            mus_tempo = 6;
-            musica_iniciar(mel_menu, sizeof(mel_menu)/sizeof(MusicNote),
-                           baj_menu, sizeof(baj_menu)/sizeof(MusicNote), TRUE);
-            break;
-        case ESTADO_INTRO:
-        case ESTADO_COMO_JUGAR:
-            musica_pausar();
-            break;
+        case ESTADO_COMO_JUGAR:  musica_pista(PISTA_MENU); break;
+        case ESTADO_INTRO:       pista_actual = -1; musica_pista(PISTA_INTRO); break;
         case ESTADO_JUEGO:
-            mus_tempo = 4;
-            switch (mundo_actual) {
-                case MUNDO_BOSQUE:
-                    musica_iniciar(mel_bosque, sizeof(mel_bosque)/sizeof(MusicNote),
-                                   baj_bosque, sizeof(baj_bosque)/sizeof(MusicNote), TRUE);
-                    break;
-                case MUNDO_VOLCAN:
-                    musica_iniciar(mel_volcan, sizeof(mel_volcan)/sizeof(MusicNote),
-                                   baj_volcan, sizeof(baj_volcan)/sizeof(MusicNote), TRUE);
-                    break;
-                case MUNDO_MARINO:
-                    musica_iniciar(mel_marino, sizeof(mel_marino)/sizeof(MusicNote),
-                                   baj_marino, sizeof(baj_marino)/sizeof(MusicNote), TRUE);
-                    break;
-                case MUNDO_CELESTE:
-                    musica_iniciar(mel_celeste, sizeof(mel_celeste)/sizeof(MusicNote),
-                                   baj_celeste, sizeof(baj_celeste)/sizeof(MusicNote), TRUE);
-                    break;
-            }
+            musica_pista(mundo_actual == MUNDO_VOLCAN ? PISTA_VOLCAN : mundo_actual == MUNDO_MARINO ? PISTA_MARINO :
+                         mundo_actual == MUNDO_CELESTE ? PISTA_CELESTE : PISTA_BOSQUE);
             break;
-        case ESTADO_GAMEOVER:
-            mus_tempo = 10;
-            musica_iniciar(mel_gameover, sizeof(mel_gameover)/sizeof(MusicNote),
-                           baj_gameover, sizeof(baj_gameover)/sizeof(MusicNote), FALSE);
-            break;
-        case ESTADO_FINJUEGO:
-            mus_tempo = 5;
-            musica_iniciar(mel_victoria, sizeof(mel_victoria)/sizeof(MusicNote),
-                           baj_victoria, sizeof(baj_victoria)/sizeof(MusicNote), FALSE);
-            break;
-        case ESTADO_CONTINUE:
-            musica_pausar();
-            break;
+        case ESTADO_GAMEOVER:    pista_actual = -1; musica_pista(PISTA_GAMEOVER); break;
+        case ESTADO_FINJUEGO:    musica_pista(PISTA_VICTORIA); break;
+        case ESTADO_CONTINUE:    musica_pista(PISTA_CONTINUAR); break;
     }
 }
 
-// ===== EFECTOS DE SONIDO (CANAL 2) =====
-void playMenuClickSound() { 
-    PSG_setTone(2, 650); 
-    PSG_setEnvelope(2, 2); 
-    timer_audio_menu = 4;
-}
-
-void playTimeAlertSound() {
-    PSG_setTone(2, 1150);
-    PSG_setEnvelope(2, 2);
-    timer_sonido_recogida = 3;
-}
-
-void reproducir_sonido_waka() {
-    PSG_setTone(2, 500);
-    PSG_setEnvelope(2, 2);
-    timer_sonido_recogida = 4;
-}
-
+// Efectos: canal PCM 2 (el 1 lo usa la batería de la música); los avisos importantes van con prioridad
+#define SFX(nombre, canal, prio) XGM2_playPCMEx(nombre, sizeof(nombre), canal, prio, FALSE, FALSE)
+void playMenuClickSound()            { SFX(sfx_click, SOUND_PCM_CH2, 0); }
+void playTimeAlertSound()            { SFX(sfx_alerta, SOUND_PCM_CH3, 0); }
+void reproducir_sonido_waka()        { SFX(sfx_pio, SOUND_PCM_CH2, 0); }
 void reproducir_sonido_deposito(u16 n) {
-    u16 f[] = {580, 680, 800, 950, 1200};
-    PSG_setTone(2, f[n > 4 ? 4 : n]);
-    PSG_setEnvelope(2, 2);
-    timer_sonido_deposito = 6;
+    switch (n % 5) {
+        case 0: SFX(sfx_nido0, SOUND_PCM_CH2, 1); break;
+        case 1: SFX(sfx_nido1, SOUND_PCM_CH2, 1); break;
+        case 2: SFX(sfx_nido2, SOUND_PCM_CH2, 1); break;
+        case 3: SFX(sfx_nido3, SOUND_PCM_CH2, 1); break;
+        default: SFX(sfx_nido4, SOUND_PCM_CH2, 1); break;
+    }
 }
-
+// Se mantiene la firma antigua (el "tono" identifica el efecto)
 void reproducir_sonido_item(u16 tono) {
-    PSG_setTone(2, tono);
-    PSG_setEnvelope(2, 1);
-    timer_sonido_recogida = 8;
+    if (tono == 1400)      SFX(sfx_gema, SOUND_PCM_CH2, 0);
+    else if (tono == 220)  SFX(sfx_reloj, SOUND_PCM_CH2, 0);
+    else if (tono == 900)  SFX(sfx_rayo, SOUND_PCM_CH2, 0);
+    else if (tono == 1500) SFX(sfx_meta, SOUND_PCM_CH3, 1);
+    else if (tono == 180)  SFX(sfx_cierre, SOUND_PCM_CH3, 1);
+    else                   SFX(sfx_click, SOUND_PCM_CH2, 0);
 }
-
-// ===== SONIDO DE PÁNICO (descendente) =====
-void reproducir_sonido_panico() {
-    PSG_setTone(2, 800);
-    PSG_setEnvelope(2, 1);
-    timer_sonido_panico = 20;
-}
-
-void procesar_silencio_psg() {
-    if (timer_sonido_panico > 0) {
-        timer_sonido_panico--;
-        u16 tono = 800 - (u16)(20 - timer_sonido_panico) * 25;
-        if (tono < 300) tono = 300;
-        PSG_setTone(2, tono);
-        if (timer_sonido_panico == 0) PSG_setEnvelope(2, 15);
-    }
-    else if (timer_sonido_recogida > 0) { 
-        timer_sonido_recogida--; 
-        if (timer_sonido_recogida == 2) PSG_setTone(2, 650); 
-        if (timer_sonido_recogida == 0) PSG_setEnvelope(2, 15); 
-    }
-    if (timer_sonido_deposito > 0) { 
-        timer_sonido_deposito--; 
-        if (timer_sonido_deposito == 0) PSG_setEnvelope(2, 15); 
-    }
-}
+void reproducir_sonido_panico()      { SFX(sfx_panico, SOUND_PCM_CH3, 1); }
+void sonido_atrapado()               { SFX(sfx_atrapado, SOUND_PCM_CH3, 1); }
+void sonido_rabia()                  { SFX(sfx_rabia, SOUND_PCM_CH3, 1); }
+void procesar_silencio_psg() {}
 
 // ===== DECLARACIONES DE FUNCIONES =====
 bool en_zona_nido(s16 tx, s16 ty);
+void dibujar_celda(s16 cx, s16 cy);
+void dibujar_mapa_completo();
+void cargar_graficos_mundo();
+void muros_alerta(bool activa);
+void hud_forzar_redibujo();
+void hud_mensaje(const char* txt);
+void hud_actualizar();
 void mostrar_pantalla_titulo();
 void mostrar_menu_opciones();
 void mostrar_pantalla_como_jugar();
@@ -552,6 +278,26 @@ void inicializar_juego();
 void resetear_tiempo_nivel();
 void leer_entrada();
 void actualizar_logica();
+void efecto_chispa(s16 x, s16 y);
+void pantalla_sprites_reset();
+void guardar_config();
+void cargar_config();
+void mostrar_idioma();
+void mostrar_historia();
+void historia_actualizar();
+void preparados();
+Sprite* pantalla_sprite(const SpriteDefinition* def, s16 x, s16 y, u16 pal, u16 anim, s16 vx, bool flip);
+extern bool titulo_parpadeo;
+void pantalla_actualizar();
+void pantalla_imagen(const Image* img);
+void pantalla_olvidar_imagen();
+void texto_centrado(const char* txt, u16 y);
+void efectos_actualizar();
+void efectos_reset();
+void animar_polluelos_mapa();
+void cazador_tinte_actualizar();
+void banner(const char* txt);
+void secuencia_heroe(u8 anim, u16 frames, bool salta);
 void mover_cazador();
 void generar_mapa_aleatorio();
 void actualizar_anim_direccion(u8* anim_actual, Sprite* sprite, s16 x_vel, s16 y_vel, bool mirar_izquierda_por_defecto);
@@ -568,6 +314,201 @@ void mostrar_enhorabuena();
 void verificar_fin_ronda_versus(bool gano_pajaro);
 
 // ===== NUEVAS FUNCIONES: INMUNIDAD Y DISPERSIÓN =====
+
+// =====================================================================
+// RENDERIZADO DEL LABERINTO, MARCADOR Y PALETAS (rediseño 16 bits)
+// Cada celda lógica de 16x16 = 4 tiles VDP consecutivos en el tileset.
+// =====================================================================
+static u16 base_maze, base_floor, base_items, base_hud;
+static const Palette* pal_maze_actual = &pal_bosque_maze;
+
+#define META_NIDO     16   // metatiles 16-17 del tileset del laberinto
+#define TILE_HUD_FONDO 72  // tile suelto: relleno del marcador
+#define TILE_HUD_BORDE 73  // tile suelto: borde inferior del marcador
+
+static void poner_meta(VDPPlane plano, u16 pal, u16 tile_base, s16 cx, s16 cy) {
+    u16 x = cx << 1, y = (cy << 1) + PLAY_TY;
+    VDP_setTileMapXY(plano, TILE_ATTR_FULL(pal, 0, 0, 0, tile_base),     x,     y);
+    VDP_setTileMapXY(plano, TILE_ATTR_FULL(pal, 0, 0, 0, tile_base + 1), x + 1, y);
+    VDP_setTileMapXY(plano, TILE_ATTR_FULL(pal, 0, 0, 0, tile_base + 2), x,     y + 1);
+    VDP_setTileMapXY(plano, TILE_ATTR_FULL(pal, 0, 0, 0, tile_base + 3), x + 1, y + 1);
+}
+
+static bool hay_muro(s16 x, s16 y) {
+    if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) return TRUE;   // fuera = muro (borde continuo)
+    return mapa[y][x] == TILE_MURO;
+}
+
+static bool es_celda_nido(s16 x, s16 y) {
+    return (y == NIDO_Y && x >= NIDO_X && x < NIDO_X + NIDO_ANCHO);
+}
+
+void dibujar_celda(s16 cx, s16 cy) {
+    if (cx < 0 || cy < 0 || cx >= MAP_WIDTH || cy >= MAP_HEIGHT) return;
+    u8 t = mapa[cy][cx];
+    // Plano A: muros (autotile por vecinos), nido u objetos
+    if (t == TILE_MURO) {
+        u16 mask = (hay_muro(cx, cy - 1) ? 1 : 0) | (hay_muro(cx + 1, cy) ? 2 : 0) |
+                   (hay_muro(cx, cy + 1) ? 4 : 0) | (hay_muro(cx - 1, cy) ? 8 : 0);
+        poner_meta(BG_A, PAL0, base_maze + mask * 4, cx, cy);
+    } else if (es_celda_nido(cx, cy)) {
+        poner_meta(BG_A, PAL0, base_maze + (META_NIDO + cx - NIDO_X) * 4, cx, cy);
+    } else if (t == TILE_POLLUELO || t == TILE_RELOJ || t == TILE_RAYO || t == TILE_GEMA) {
+        u16 item = (t == TILE_POLLUELO) ? 0 : (t == TILE_RELOJ) ? 1 : (t == TILE_RAYO) ? 2 : 3;
+        poner_meta(BG_A, PAL2, base_items + item * 4, cx, cy);
+    } else {
+        poner_meta(BG_A, PAL0, 0, cx, cy);   // tile 0 = transparente
+        VDP_setTileMapXY(BG_A, 0, cx << 1, (cy << 1) + PLAY_TY);
+        VDP_setTileMapXY(BG_A, 0, (cx << 1) + 1, (cy << 1) + PLAY_TY);
+        VDP_setTileMapXY(BG_A, 0, cx << 1, (cy << 1) + PLAY_TY + 1);
+        VDP_setTileMapXY(BG_A, 0, (cx << 1) + 1, (cy << 1) + PLAY_TY + 1);
+    }
+    // Plano B: suelo con sombra proyectada por los muros de arriba/izquierda
+    u16 sombra = (hay_muro(cx, cy - 1) ? 1 : 0) | (hay_muro(cx - 1, cy) ? 2 : 0) | (hay_muro(cx - 1, cy - 1) ? 4 : 0);
+    u16 textura = ((cx * 7) + (cy * 13)) & 3;
+    poner_meta(BG_B, PAL1, base_floor + (textura * 8 + sombra) * 4, cx, cy);
+}
+
+void dibujar_mapa_completo() {
+    for (s16 y = 0; y < MAP_HEIGHT; y++)
+        for (s16 x = 0; x < MAP_WIDTH; x++) dibujar_celda(x, y);
+}
+
+void cargar_graficos_mundo() {
+    // Cada mundo tiene su tileset de muros/nido/marcador y su suelo (mismo nº de tiles en todos)
+    const TileSet* ts_maze = &ts_bosque_maze;   const TileSet* ts_floor = &ts_bosque_floor;
+    const Palette* p_maze  = &pal_bosque_maze;  const Palette* p_floor  = &pal_bosque_floor;
+    if (mundo_actual == MUNDO_VOLCAN)       { ts_maze = &ts_volcan_maze;  ts_floor = &ts_volcan_floor;  p_maze = &pal_volcan_maze;  p_floor = &pal_volcan_floor; }
+    else if (mundo_actual == MUNDO_MARINO)  { ts_maze = &ts_marino_maze;  ts_floor = &ts_marino_floor;  p_maze = &pal_marino_maze;  p_floor = &pal_marino_floor; }
+    else if (mundo_actual == MUNDO_CELESTE) { ts_maze = &ts_celeste_maze; ts_floor = &ts_celeste_floor; p_maze = &pal_celeste_maze; p_floor = &pal_celeste_floor; }
+
+    pal_maze_actual = p_maze;
+    base_maze  = TILE_USER_INDEX;
+    base_floor = base_maze + ts_maze->numTile;
+    base_items = base_floor + ts_floor->numTile;
+    base_hud   = base_items + ts_items.numTile;
+    VDP_loadTileSet(ts_maze, base_maze, DMA);
+    VDP_loadTileSet(ts_floor, base_floor, DMA);
+    VDP_loadTileSet(&ts_items, base_items, DMA);
+    VDP_loadTileSet(&ts_hud, base_hud, DMA);
+    VDP_loadFont(&ts_font, DMA);
+    PAL_setPalette(PAL0, p_maze->data, CPU);
+    PAL_setPalette(PAL1, p_floor->data, CPU);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    color_muro_original = p_maze->data[1];
+    VDP_setTextPalette(PAL0);
+}
+
+// Muros en alerta (rabia / cierre): mezcla los 5 tonos del muro con rojo (nivel 0..8)
+static const u16 rojos_alerta[5] = { RGB24_TO_VDPCOLOR(0xD83020), RGB24_TO_VDPCOLOR(0x902018), RGB24_TO_VDPCOLOR(0xF06040),
+                                     RGB24_TO_VDPCOLOR(0xFFA080), RGB24_TO_VDPCOLOR(0x601010) };
+void muros_mezcla(u16 nivel) {
+    static u16 nivel_actual = 0xFFFF;
+    if (nivel == nivel_actual) return;
+    nivel_actual = nivel;
+    for (u16 i = 0; i < 5; i++) {
+        u16 a = pal_maze_actual->data[1 + i], b = rojos_alerta[i], c = 0;
+        for (u16 sh = 1; sh <= 9; sh += 4) {
+            s16 ca = (a >> sh) & 7, cb = (b >> sh) & 7;
+            c |= ((u16)(ca + ((cb - ca) * (s16)nivel) / 8) & 7) << sh;
+        }
+        PAL_setColor(1 + i, c);
+    }
+}
+void muros_alerta(bool activa) { muros_mezcla(activa ? 8 : 0); }
+
+// ---------------- MARCADOR (fuente 8x16 con fondo integrado, en el plano B) ----------------
+static u32 hud_cache_puntos = 0xFFFFFFFF;
+static u16 hud_cache_tiempo = 0xFFFF, hud_cache_huevos = 0xFFFF, hud_cache_vidas = 0xFFFF;
+static u8  hud_cache_parpadeo = 0xFF;
+
+static void hud_texto(const char* txt, u16 col) {
+    for (u16 i = 0; txt[i] && col + i < 40; i++) {
+        const char* p = HUD_CHARS; u16 idx = 0;
+        char c = txt[i];
+        if (c >= 'a' && c <= 'z') c -= 32;
+        for (u16 k = 0; p[k]; k++) if (p[k] == c) { idx = k; break; }
+        VDP_setTileMapXY(BG_B, TILE_ATTR_FULL(PAL0, 0, 0, 0, base_hud + idx * 2), col + i, 0);
+        VDP_setTileMapXY(BG_B, TILE_ATTR_FULL(PAL0, 0, 0, 0, base_hud + idx * 2 + 1), col + i, 1);
+    }
+}
+
+static void hud_icono(u16 item, u16 col) {
+    u16 t = base_items + item * 4;
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 0, 0, 0, t),     col,     0);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 0, 0, 0, t + 1), col + 1, 0);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 0, 0, 0, t + 2), col,     1);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 0, 0, 0, t + 3), col + 1, 1);
+}
+
+void hud_forzar_redibujo() {
+    hud_cache_puntos = 0xFFFFFFFF; hud_cache_tiempo = 0xFFFF; hud_cache_huevos = 0xFFFF;
+    hud_cache_vidas = 0xFFFF; hud_cache_parpadeo = 0xFF;
+    hud_texto("                                        ", 0);
+    for (u16 x = 0; x < 40; x++) { VDP_setTileMapXY(BG_A, 0, x, 0); VDP_setTileMapXY(BG_A, 0, x, 1); }
+}
+
+void hud_mensaje(const char* txt) {
+    hud_texto("                                        ", 0);
+    for (u16 x = 0; x < 40; x++) { VDP_setTileMapXY(BG_A, 0, x, 0); VDP_setTileMapXY(BG_A, 0, x, 1); }
+    u16 len = strlen(txt);
+    hud_texto(txt, (40 - len) / 2);
+}
+
+void hud_actualizar() {
+    char buf[16];
+    u16 min = tiempo_restante_segundos / 60;
+    u16 seg = tiempo_restante_segundos - (min * 60);
+    bool redibujo_total = (hud_cache_tiempo == 0xFFFF);
+
+    if (modo_jugadores == 1) {
+        if (redibujo_total) { hud_texto("P1", 1); hud_texto("P2", 9); hud_texto("TIME", 26); }
+        if (hud_cache_puntos != (u32)(victorias_pajaro * 100 + victorias_cazador)) {
+            hud_cache_puntos = victorias_pajaro * 100 + victorias_cazador;
+            sprintf(buf, "%d", (u16)victorias_pajaro);  hud_texto(buf, 4);
+            sprintf(buf, "%d", (u16)victorias_cazador); hud_texto(buf, 12);
+        }
+    } else {
+        if (redibujo_total) {
+            if (modo_juego_seleccionada == 0) { sprintf(buf, "%d-%d", mundo_actual + 1, fase_actual); hud_texto(buf, 1); }
+            else hud_texto(T("LIBRE", "FREE"), 1);
+            hud_texto("SCORE", 7); hud_texto("TIME", 20);
+            hud_icono(0, 29);   // polluelo
+            hud_icono(4, 36);   // cabeza del protagonista
+        }
+        if (hud_cache_puntos != flicky.puntuacion) {
+            // el marcador "cuenta" hasta la puntuación real
+            if (hud_cache_puntos > flicky.puntuacion) hud_cache_puntos = flicky.puntuacion;
+            else {
+                u32 dif = flicky.puntuacion - hud_cache_puntos;
+                hud_cache_puntos += (dif > 400) ? 50 : ((dif > 40) ? 10 : dif);
+            }
+            sprintf(buf, "%06ld", hud_cache_puntos); hud_texto(buf, 13);
+        }
+        u8 parpadeo = salida_abierta ? ((frame_counter >> 4) & 1) : 0;
+        u16 huevos = total_salvados * 100 + max_polluelos_nivel;
+        if (hud_cache_huevos != huevos || hud_cache_parpadeo != parpadeo) {
+            hud_cache_huevos = huevos; hud_cache_parpadeo = parpadeo;
+            if (salida_abierta && parpadeo) hud_texto(T("META!", "GOAL!"), 31);
+            else { sprintf(buf, "%02d/%02d", total_salvados, max_polluelos_nivel); hud_texto(buf, 31); }
+        }
+        if (hud_cache_vidas != (u16)continues_restantes) {
+            hud_cache_vidas = continues_restantes;
+            sprintf(buf, "x%d", continues_restantes); hud_texto(buf, 38);
+        }
+    }
+    // con poco tiempo el reloj parpadea
+    u16 clave_tiempo = tiempo_restante_segundos;
+    bool oculto = (tiempo_restante_segundos <= 15) && ((frame_counter & 16) != 0);
+    if (oculto) clave_tiempo |= 0x8000;
+    if (hud_cache_tiempo != clave_tiempo) {
+        hud_cache_tiempo = clave_tiempo;
+        if (oculto) strcpy(buf, "    ");
+        else sprintf(buf, "%d:%02d", min, seg);
+        hud_texto(buf, (modo_jugadores == 1) ? 31 : 25);
+    }
+}
+
 void dispersar_polluelos() {
     for (u16 i = 0; i < semillas_en_fila; i++) {
         if (sprites_seguidores[i]) {
@@ -576,8 +517,8 @@ void dispersar_polluelos() {
         }
     }
     
-    u16 cx = flicky.x >> 3;
-    u16 cy = flicky.y >> 3;
+    u16 cx = (flicky.x + 8) >> CELDA_SHIFT;
+    u16 cy = (flicky.y + 8) >> CELDA_SHIFT;
     u16 dispersados = 0;
     u16 intentos = 0;
     
@@ -589,7 +530,7 @@ void dispersar_polluelos() {
         if (rx >= 1 && rx < MAP_WIDTH - 1 && ry >= 1 && ry < MAP_HEIGHT - 1) {
             if (mapa[ry][rx] == TILE_SUELO && !en_zona_nido(rx, ry)) {
                 mapa[ry][rx] = TILE_POLLUELO;
-                VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + TILE_POLLUELO), rx, ry);
+                dibujar_celda(rx, ry);
                 dispersados++;
             }
         }
@@ -623,33 +564,54 @@ int main(bool hard) {
     SYS_enableInts();
     SPR_init();
 
-    for(u8 i = 0; i < 4; i++) {
-        PSG_setEnvelope(i, 15);
-    }
+    // driver de sonido XGM2: todas las canciones en un único bloque (comparten muestras PCM)
+    XGM2_loadDriver(TRUE);
+    XGM2_load(musica);
 
     JOY_init();
 
-    PAL_setPalette(PAL0, bkg_pal.data, CPU);                  
-    PAL_setPalette(PAL1, bg_forest.palette->data, CPU);       
-    PAL_setPalette(PAL2, flicky_sprite.palette->data, CPU);   
-    PAL_setPalette(PAL3, cazador_sprite.palette->data, CPU);   
+    VDP_loadFont(&ts_font, DMA);
+    PAL_setPalette(PAL0, pal_bosque_maze.data, CPU);
+    PAL_setPalette(PAL1, pal_bosque_floor.data, CPU);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
 
-    color_muro_original = bkg_pal.data[1];
+    color_muro_original = pal_bosque_maze.data[1];
 
-    estado_actual = ESTADO_TITULO;
-    mostrar_pantalla_titulo();
+    cargar_config();
+    estado_actual = ESTADO_IDIOMA;
+    mostrar_idioma();
 
     while(1) {
         u16 joy = JOY_readJoypad(JOY_1);
         static bool boton_pulsado = FALSE;
 
-        if (timer_audio_menu > 0) {
-            timer_audio_menu--;
-            if (timer_audio_menu == 0) PSG_setEnvelope(2, 15);
-        }
 
-        if (estado_actual == ESTADO_TITULO) {
-            if (joy & BUTTON_START) {
+        static u16 titulo_espera = 0;
+        if (estado_actual == ESTADO_IDIOMA) {
+            if (!boton_pulsado) {
+                if ((joy & (BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT))) {
+                    idioma ^= 1; playMenuClickSound(); mostrar_idioma(); boton_pulsado = TRUE;
+                } else if (joy & (BUTTON_START | BUTTON_A | BUTTON_C)) {
+                    playMenuClickSound(); guardar_config();
+                    estado_actual = ESTADO_HISTORIA; mostrar_historia(); boton_pulsado = TRUE;
+                }
+            }
+            if (!(joy & (BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT | BUTTON_A | BUTTON_C | BUTTON_START))) boton_pulsado = FALSE;
+        }
+        else if (estado_actual == ESTADO_HISTORIA) {
+            historia_actualizar();      // START la salta; al terminar pasa al título
+            if (estado_actual == ESTADO_HISTORIA && !boton_pulsado && (joy & BUTTON_START)) {
+                estado_actual = ESTADO_TITULO; titulo_espera = 0; mostrar_pantalla_titulo(); boton_pulsado = TRUE;
+            }
+            if (!(joy & BUTTON_START)) boton_pulsado = FALSE;
+        }
+        else if (estado_actual == ESTADO_TITULO) {
+            // modo "attract": si nadie toca el mando, vuelve a contar la historia
+            if (joy) titulo_espera = 0;
+            else if (++titulo_espera > 1500) { titulo_espera = 0; estado_actual = ESTADO_HISTORIA; mostrar_historia(); }
+            if (boton_pulsado) { if (!(joy & BUTTON_START)) boton_pulsado = FALSE; }
+            else if (joy & BUTTON_START) {
                 playMenuClickSound();
                 estado_actual = ESTADO_MENU;
                 musica_segun_estado(ESTADO_MENU);
@@ -669,6 +631,7 @@ int main(bool hard) {
                 else if (joy & BUTTON_B) { if (modo_juego_seleccionada != 1) { modo_juego_seleccionada = 1; playMenuClickSound(); mostrar_menu_opciones(); } boton_pulsado = TRUE; }
                 
                 else if (joy & BUTTON_C) { modo_battle_royale = !modo_battle_royale; playMenuClickSound(); mostrar_menu_opciones(); boton_pulsado = TRUE; }
+                else if (joy & BUTTON_MODE) { idioma ^= 1; guardar_config(); playMenuClickSound(); pantalla_olvidar_imagen(); mostrar_menu_opciones(); boton_pulsado = TRUE; }
                 
                 else if (joy & BUTTON_START) {
                     total_partidas++;
@@ -699,7 +662,7 @@ int main(bool hard) {
                     waitMs(200);
                 }
             }
-            if (!(joy & (BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT | BUTTON_A | BUTTON_B | BUTTON_C | BUTTON_START))) { boton_pulsado = FALSE; }
+            if (!(joy & (BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT | BUTTON_A | BUTTON_B | BUTTON_C | BUTTON_START | BUTTON_MODE))) { boton_pulsado = FALSE; }
         }
         else if (estado_actual == ESTADO_MENU_VERSUS) {
             if (!boton_pulsado) {
@@ -722,7 +685,7 @@ int main(bool hard) {
                         mostrar_menu_opciones();
                         boton_pulsado = TRUE;
                         waitMs(200);
-                        return 0;
+                        continue;
                     }
                     playMenuClickSound();
                     mostrar_menu_versus();
@@ -743,7 +706,7 @@ int main(bool hard) {
                         mostrar_menu_opciones();
                         boton_pulsado = TRUE;
                         waitMs(200);
-                        return 0;
+                        continue;
                     }
                     playMenuClickSound();
                     mostrar_menu_versus();
@@ -824,10 +787,10 @@ int main(bool hard) {
                 playMenuClickSound();
                 juego_pausado = !juego_pausado;
                 if (juego_pausado) {
-                    VDP_drawText("PAUSA", 18, 13);
+                    hud_mensaje(T("PAUSA", "PAUSE"));
                     musica_pausar();
                 } else {
-                    VDP_drawText("      ", 18, 13); 
+                    hud_forzar_redibujo();
                     musica_reanudar();
                 }
                 waitMs(250); 
@@ -840,6 +803,7 @@ int main(bool hard) {
             }
         }
 
+        if (estado_actual != ESTADO_JUEGO) pantalla_actualizar();
         musica_actualizar();
         SPR_update();
         SYS_doVBlankProcess();
@@ -865,144 +829,172 @@ void resetear_tiempo_nivel() {
 }
 
 void mostrar_pantalla_titulo() {
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
-    PAL_setPalette(PAL0, bg_title.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_title, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    pantalla_imagen(&bg_title);
+    VDP_loadFont(&ts_font, DMA);
     VDP_setTextPalette(PAL0);
-    PAL_setColor(15, RGB24_TO_VDPCOLOR(0xFFFFFF));
-    
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
+    // desfile: el pájaro con sus polluelos huyendo del cazador
+    pantalla_sprite(&hero_sprite, -24, 160, PAL2, ANIM_LADO, 1, FALSE);
+    for (u16 i = 0; i < 3; i++) pantalla_sprite(&chick_sprite, -48 - i * 18, 160, PAL2, 0, 1, FALSE);
+    pantalla_sprite(&hunter_sprite, -150, 152, PAL3, ANIM_LADO, 1, FALSE);
+    texto_centrado("(C) 2026 RETROPLAYING BCN", 26);
     musica_segun_estado(ESTADO_TITULO);
-    texto_animado("PRESIONA START", 13, 22, 3);
+    titulo_parpadeo = TRUE;
+}
+
+// Colores de texto de los menús: PAL0 blanco (seleccionado), PAL1 dorado (títulos), PAL3 gris (resto).
+// El índice 13 de cada paleta es el color del panel: la fuente opaca se funde con él.
+static void menu_paletas(const Image* img) {
+    u16 panel = img->palette->data[13];
+    PAL_setColor(16 + 13, panel); PAL_setColor(16 + 14, 0); PAL_setColor(16 + 15, RGB24_TO_VDPCOLOR(0xFFD860));
+    PAL_setColor(48 + 13, panel); PAL_setColor(48 + 14, 0); PAL_setColor(48 + 15, RGB24_TO_VDPCOLOR(0x8890A8));
+}
+static void menu_texto(const char* txt, u16 x, u16 y, u16 pal) {
+    VDP_setTextPalette(pal);
+    VDP_drawText(txt, x, y);
+    VDP_setTextPalette(PAL0);
+}
+static void menu_opcion(const char* txt, u16 x, u16 y, bool sel) {
+    menu_texto(sel ? ">" : " ", x, y, PAL0);
+    menu_texto(txt, x + 2, y, sel ? PAL0 : PAL3);
 }
 
 void mostrar_menu_opciones() {
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
     char buf[40];
-
-    PAL_setPalette(PAL1, bg_opciones.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_opciones, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-
-    VDP_setTextPalette(PAL2);
-    PAL_setColor(47, RGB24_TO_VDPCOLOR(0xFFFFFF)); 
-
+    pantalla_imagen(IMG(bg_opciones));
+    VDP_loadFont(&ts_font_menu, DMA);          // fuente con fondo del color del panel
+    menu_paletas(IMG(bg_opciones));
     musica_segun_estado(ESTADO_MENU);
 
-    sprintf(buf, "PARTIDAS JUGADAS: %ld", total_partidas);
-    VDP_drawText(buf, 4, 2);
-    sprintf(buf, "PUNTOS MAXIMOS:   %06ld", puntuacion_maxima);
-    VDP_drawText(buf, 4, 3);
-    
-    sprintf(buf, "WINS P1 (PAJ): %ld | P2 (CAZ): %ld", victorias_pajaro, victorias_cazador);
-    VDP_drawText(buf, 4, 4);
+    sprintf(buf, T("PARTIDAS %-5ld   RECORD %06ld", "GAMES %-5ld      RECORD %06ld"), total_partidas, puntuacion_maxima);
+    menu_texto(buf, 3, 6, PAL3);
+    sprintf(buf, T("VICTORIAS  PAJARO %ld  CAZADOR %ld", "WINS       BIRD %ld  HUNTER %ld"), victorias_pajaro, victorias_cazador);
+    menu_texto(buf, 3, 7, PAL3);
 
-    VDP_drawText("MODO DE JUEGO (IZQ/DER):", 4, 7);
-    VDP_drawText(modo_jugadores == 0 ? "> 1 JUGADOR  (VS CPU)" : "  1 JUGADOR  (VS CPU)", 6, 8);
-    VDP_drawText(modo_jugadores == 1 ? "> 2 JUGADORES (MANUAL)" : "  2 JUGADORES (MANUAL)", 6, 9);
+    menu_texto(T("JUGADORES", "PLAYERS"), 3, 9, PAL1);           menu_texto(T("IZQ/DER", "LEFT/RIGHT"), T(30, 27), 9, PAL3);
+    menu_opcion(T("1 JUGADOR CONTRA LA CPU", "1 PLAYER VS THE CPU"), 4, 10, modo_jugadores == 0);
+    menu_opcion(T("2 JUGADORES", "2 PLAYERS"), 4, 11, modo_jugadores == 1);
 
-    VDP_drawText("ESTRUCTURA PARTIDA (PULSA A/B):", 4, 12);
-    VDP_drawText(modo_juego_seleccionada == 0 ? "> MODO HISTORIA (4 MUNDOS x 5 FASES)" : "  MODO HISTORIA (4 MUNDOS x 5 FASES)", 6, 13);
-    VDP_drawText(modo_juego_seleccionada == 1 ? "> MODO LIBRE    (1 MAPA RANDOM)" : "  MODO LIBRE    (1 MAPA RANDOM)", 6, 14);
+    menu_texto(T("MODO", "MODE"), 3, 13, PAL1);                menu_texto("A / B", 32, 13, PAL3);
+    menu_opcion(T("HISTORIA  4 MUNDOS x 5 FASES", "STORY     4 WORLDS x 5 STAGES"), 4, 14, modo_juego_seleccionada == 0);
+    menu_opcion(T("LIBRE     UN MAPA AL AZAR", "FREE      ONE RANDOM MAZE"), 4, 15, modo_juego_seleccionada == 1);
 
-    VDP_drawText("MODO ESPECIAL (PULSA C):", 4, 17);
-    VDP_drawText(modo_battle_royale ? "> BATTLE ROYALE: ACTIVO!" : "  BATTLE ROYALE: DESACT.", 6, 18);
+    menu_texto("BATTLE ROYALE", 3, 17, PAL1);       menu_texto("C", 36, 17, PAL3);
+    menu_opcion(modo_battle_royale ? T("ACTIVADO", "ON") : T("DESACTIVADO", "OFF"), 4, 18, TRUE);
 
-    VDP_drawText("SELECCIONA DIFICULTAD (ARR/ABA):", 4, 21);
-    VDP_drawText(d_sel == 0 ? "> FACIL    (2 MIN / 5 HUEVOS)" : "  FACIL    (2 MIN / 5 HUEVOS)", 6, 22);
-    VDP_drawText(d_sel == 1 ? "> MEDIO   (3 MIN / 10 HUEVOS)" : "  MEDIO   (3 MIN / 10 HUEVOS)", 6, 23);
-    VDP_drawText(d_sel == 2 ? "> DIFICIL (5 MIN / 15 HUEVOS)" : "  DIFICIL (5 MIN / 15 HUEVOS)", 6, 24);
+    menu_texto(T("DIFICULTAD", "DIFFICULTY"), 3, 20, PAL1);          menu_texto(T("ARR/ABA", "UP/DOWN"), 30, 20, PAL3);
+    menu_opcion(T("FACIL    2 MIN   5 POLLUELOS", "EASY     2 MIN   5 CHICKS"), 4, 21, d_sel == 0);
+    menu_opcion(T("MEDIO    3 MIN  10 POLLUELOS", "NORMAL   3 MIN  10 CHICKS"), 4, 22, d_sel == 1);
+    menu_opcion(T("DIFICIL  5 MIN  15 POLLUELOS", "HARD     5 MIN  15 CHICKS"), 4, 23, d_sel == 2);
+
+    menu_texto(T("START: JUGAR    MODE: IDIOMA", "START: PLAY    MODE: LANGUAGE"), T(7, 6), 25, PAL1);
+}
+
+static void icono_item(u16 base, u16 item, u16 col, u16 fila) {
+    u16 t = base + item * 4;
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 1, 0, 0, t),     col,     fila);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 1, 0, 0, t + 1), col + 1, fila);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 1, 0, 0, t + 2), col,     fila + 1);
+    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL2, 1, 0, 0, t + 3), col + 1, fila + 1);
 }
 
 void mostrar_pantalla_como_jugar() {
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
-    PAL_setPalette(PAL1, bg_como_jugar.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_como_jugar, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    pantalla_imagen(IMG(bg_como_jugar));
+    VDP_loadFont(&ts_font_menu, DMA);
+    menu_paletas(IMG(bg_como_jugar));
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    // iconos de los objetos (mismos tiles que en el juego), justo detrás de la imagen
+    u16 base = TILE_USER_INDEX + IMG(bg_como_jugar)->tileset->numTile;
+    VDP_loadTileSet(&ts_items, base, DMA);
+
+    icono_item(base, 0, 2, 6);
+    menu_texto(T("RECOGE LOS POLLUELOS Y LLEVALOS", "PICK UP THE CHICKS AND BRING"), 5, 6, PAL0);
+    menu_texto(T("AL NIDO DEL CENTRO DEL LABERINTO.", "THEM TO THE NEST IN THE MIDDLE."), 5, 7, PAL0);
+    PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
+    pantalla_sprite(&hunter_sprite, 12, 70, PAL3, ANIM_ABAJO, 0, FALSE);
+    menu_texto(T("SI EL CAZADOR TE PILLA, TUS", "IF THE HUNTER CATCHES YOU, YOUR"), 5, 9, PAL0);
+    menu_texto(T("POLLUELOS SE ESCAPAN. SIN NINGUNO", "CHICKS RUN AWAY. WITH NONE BEHIND"), 5, 10, PAL0);
+    menu_texto(T("DETRAS, PIERDES LA PARTIDA.", "YOU, YOU LOSE THE ROUND."), 5, 11, PAL0);
+    icono_item(base, 1, 2, 13);
+    menu_texto(T("RELOJ: FRENA AL CAZADOR.", "CLOCK: SLOWS THE HUNTER DOWN."), 5, 13, PAL1);
+    icono_item(base, 2, 2, 15);
+    menu_texto(T("RAYO: CORRES EL DOBLE.", "BOLT: YOU RUN TWICE AS FAST."), 5, 15, PAL1);
+    icono_item(base, 3, 2, 17);
+    menu_texto(T("GEMA: 250 PUNTOS EXTRA.", "GEM: 250 BONUS POINTS."), 5, 17, PAL1);
+    menu_texto(T("SI LOS MUROS SE PONEN ROJOS, EL", "IF THE WALLS TURN RED, THE HUNTER"), 5, 19, PAL0);
+    menu_texto(T("CAZADOR ENTRA EN RABIA: HUYE!", "GOES BERSERK: RUN FOR IT!"), 5, 20, PAL0);
+    menu_texto(T("CADA 2500 PUNTOS GANAS UN", "EVERY 2500 POINTS YOU EARN AN"), 5, 22, PAL0);
+    menu_texto(T("CONTINUE EXTRA.", "EXTRA CONTINUE."), 5, 23, PAL0);
+    menu_texto(T("PULSA START", "PRESS START"), 14, 25, PAL1);
 }
 
 // ===== MENÚ VERSUS ACTUALIZADO CON SELECCIÓN DE ESCENARIO Y "VOLVER AL MENÚ" =====
 void mostrar_menu_versus() {
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
     char buf[40];
+    pantalla_imagen(&bg_versus);
+    VDP_loadFont(&ts_font_menu, DMA);
+    menu_paletas(&bg_versus);
 
-    PAL_setPalette(PAL0, bg_versus.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_versus, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-    
-    VDP_setTextPalette(PAL0);
-    PAL_setColor(15, RGB24_TO_VDPCOLOR(0xFFFFFF));
-
-    VDP_drawText("CONFIGURACION VERSUS", 10, 3);
-    VDP_drawText("====================", 10, 4);
-
-    sprintf(buf, "%s BATTLE ROYALE: %s", (versus_sel == 0) ? ">" : " ", modo_battle_royale ? "ON " : "OFF");
-    VDP_drawText(buf, 7, 7);
+    menu_opcion(modo_battle_royale ? T("BATTLE ROYALE      SI", "BATTLE ROYALE      ON") : T("BATTLE ROYALE      NO", "BATTLE ROYALE      OFF"), 5, 7, versus_sel == 0);
 
     u16 segs = (versus_tiempo_idx == 0) ? 60 : ((versus_tiempo_idx == 1) ? 90 : ((versus_tiempo_idx == 2) ? 120 : 180));
-    sprintf(buf, "%s TIEMPO RONDA:  %d SEG", (versus_sel == 1) ? ">" : " ", segs);
-    VDP_drawText(buf, 7, 10);
+    sprintf(buf, T("TIEMPO DE RONDA    %d SEG", "ROUND TIME         %d SEC"), segs);
+    menu_opcion(buf, 5, 10, versus_sel == 1);
 
-    sprintf(buf, "%s AL MEJOR DE:   %d WINS", (versus_sel == 2) ? ">" : " ", versus_victorias_req);
-    VDP_drawText(buf, 7, 13);
+    sprintf(buf, T("AL MEJOR DE        %d", "BEST OF            %d"), versus_victorias_req);
+    menu_opcion(buf, 5, 13, versus_sel == 2);
 
     const char* nombre_mundo;
     switch (versus_mundo_idx) {
-        case 0: nombre_mundo = "BOSQUE  "; break;
-        case 1: nombre_mundo = "VOLCAN  "; break;
-        case 2: nombre_mundo = "MARINO  "; break;
-        case 3: nombre_mundo = "CELESTE "; break;
-        default: nombre_mundo = "ALEATORIO"; break;
+        case 0: nombre_mundo = T("BOSQUE", "FOREST"); break;
+        case 1: nombre_mundo = T("VOLCAN", "VOLCANO"); break;
+        case 2: nombre_mundo = T("MAR", "SEA"); break;
+        case 3: nombre_mundo = T("CIELO", "SKY"); break;
+        default: nombre_mundo = T("AL AZAR", "RANDOM"); break;
     }
-    sprintf(buf, "%s ESCENARIO:     %s", (versus_sel == 3) ? ">" : " ", nombre_mundo);
-    VDP_drawText(buf, 7, 16);
+    sprintf(buf, T("ESCENARIO          %s", "STAGE              %s"), nombre_mundo);
+    menu_opcion(buf, 5, 16, versus_sel == 3);
 
-    // NUEVO: Opción interactiva para volver
-    sprintf(buf, "%s VOLVER AL MENU PRINCIPAL", (versus_sel == 4) ? ">" : " ");
-    VDP_drawText(buf, 7, 19);
+    menu_opcion(T("VOLVER AL MENU", "BACK TO MENU"), 5, 19, versus_sel == 4);
 
-    VDP_drawText("P1 (MANDO 1) = PAJARO", 7, 22);
-    VDP_drawText("P2 (MANDO 2) = CAZADOR", 7, 23);
-
-    VDP_drawText("PULSA START PARA PELEAR", 9, 25);
+    menu_texto(T("MANDO 1: PAJARO", "PAD 1: BIRD"), 5, 22, PAL3);
+    menu_texto(T("MANDO 2: CAZADOR", "PAD 2: HUNTER"), 5, 23, PAL3);
+    menu_texto(T("PULSA START PARA EMPEZAR", "PRESS START TO BEGIN"), T(8, 10), 25, PAL1);
 }
 
 void mostrar_intro_mundo_actual() {
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
-
-    for(u8 i = 0; i < 4; i++) PSG_setEnvelope(i, 15);
-
-    if (mundo_actual == MUNDO_BOSQUE) {
-        PAL_setPalette(PAL1, bg_intro_bosque.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_intro_bosque, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-    } else if (mundo_actual == MUNDO_VOLCAN) {
-        PAL_setPalette(PAL1, bg_intro_volcan.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_intro_volcan, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-    } else if (mundo_actual == MUNDO_MARINO) {
-        PAL_setPalette(PAL1, bg_intro_acuatico.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_intro_acuatico, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-    } else {
-        PAL_setPalette(PAL1, bg_intro_celeste.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_intro_celeste, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
-    }
+    const Image* img = IMG(bg_intro_bosque);
+    const SpriteDefinition* enemigo = &hunter_sprite;
+    if (mundo_actual == MUNDO_VOLCAN)       { img = IMG(bg_intro_volcan);    enemigo = &flame_sprite; }
+    else if (mundo_actual == MUNDO_MARINO)  { img = IMG(bg_intro_acuatico);  enemigo = &shark_sprite; }
+    else if (mundo_actual == MUNDO_CELESTE) { img = IMG(bg_intro_celeste);   enemigo = &imp_sprite; }
+    pantalla_imagen(img);
+    VDP_loadFont(&ts_font, DMA);
+    VDP_setTextPalette(PAL0);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    PAL_setPalette(PAL3, enemigo->palette->data, CPU);
+    pantalla_sprite(&hero_sprite, 104, 150, PAL2, ANIM_LADO, 0, FALSE);
+    pantalla_sprite(&chick_sprite, 84, 150, PAL2, 0, 0, FALSE);
+    pantalla_sprite(enemigo, 196, 142, PAL3, ANIM_LADO, 0, TRUE);
+    titulo_parpadeo = TRUE;
 }
 
 void inicializar_juego() {
-    VDP_loadTileSet(&bkg_tileset, TILE_USER_INDEX, CPU);
+    pantalla_sprites_reset();
+    pantalla_olvidar_imagen();
+    titulo_parpadeo = FALSE;
     VDP_clearPlane(BG_A, TRUE);
     VDP_clearPlane(BG_B, TRUE);
-    
-    PAL_setPalette(PAL0, bkg_pal.data, CPU);
-    PAL_setPalette(PAL2, flicky_sprite.palette->data, CPU);
+    cargar_graficos_mundo();
 
-    const SpriteDefinition* cazador_recurso = &cazador_sprite;
+    const SpriteDefinition* cazador_recurso = &hunter_sprite;
     if (mundo_actual == MUNDO_VOLCAN) {
-        cazador_recurso = &sprites_llama;
+        cazador_recurso = &flame_sprite;
     } else if (mundo_actual == MUNDO_MARINO) {
-        cazador_recurso = &sprites_tiburon;
+        cazador_recurso = &shark_sprite;
     } else if (mundo_actual == MUNDO_CELESTE) {
-        cazador_recurso = &sprites_demonio;
+        cazador_recurso = &imp_sprite;
     }
     PAL_setPalette(PAL3, cazador_recurso->palette->data, CPU);
 
@@ -1031,64 +1023,37 @@ void inicializar_juego() {
     }
 
     generar_mapa_aleatorio();
-
-    if (mundo_actual == MUNDO_BOSQUE) {
-        PAL_setPalette(PAL1, bg_forest.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_forest, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX + bkg_tileset.numTile), 0, 0, FALSE, DMA);
-    } else if (mundo_actual == MUNDO_VOLCAN) {
-        PAL_setPalette(PAL1, bg_volcan.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_volcan, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX + bkg_tileset.numTile), 0, 0, FALSE, DMA);
-    } else if (mundo_actual == MUNDO_MARINO) {
-        PAL_setPalette(PAL1, bg_marino.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_marino, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX + bkg_tileset.numTile), 0, 0, FALSE, DMA);
-    } else {
-        PAL_setPalette(PAL1, bg_celeste.palette->data, CPU);
-        VDP_drawImageEx(BG_B, &bg_celeste, TILE_ATTR_FULL(PAL1, 0, 0, 0, TILE_USER_INDEX + bkg_tileset.numTile), 0, 0, FALSE, DMA);
-    }
-
-    for(u16 y = 0; y < MAP_HEIGHT; y++) {
-        for(u16 x = 0; x < MAP_WIDTH; x++) {
-            if (mapa[y][x] != TILE_SUELO && mapa[y][x] != TILE_MURO) mapa[y][x] = TILE_SUELO;
-            if(mapa[y][x] == TILE_MURO) {
-                VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + TILE_MURO), x, y);
-            }
-        }
-    }
-
-    for(u16 x = 0; x < MAP_WIDTH; x++) {
-        VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), x, 27);
-        VDP_setTileMapXY(BG_B, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), x, 27);
-    }
-
     calcular_alcanzables();
-
-    for (u16 i = 0; i < NIDO_ANCHO; i++) {
-        VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + TILE_NIDO), NIDO_X + i, NIDO_Y);
-    }
-
     repartir_polluelos_seguros();
+    VDP_setEnable(FALSE);          // dibujar con la pantalla apagada: el nivel aparece de golpe
+    dibujar_mapa_completo();
+    hud_forzar_redibujo();
+    VDP_setEnable(TRUE);
 
-    flicky.x = 16; flicky.y = 8; flicky.x_vel = 0; flicky.y_vel = 0;
-    flicky.sprite = SPR_addSprite(&flicky_sprite, flicky.x - FLICKY_DRAW_OFFSET, flicky.y - FLICKY_DRAW_OFFSET, TILE_ATTR(PAL2, 0, FALSE, FALSE));
+    flicky.x = 1 * CELDA; flicky.y = 1 * CELDA; flicky.x_vel = 0; flicky.y_vel = 0;
+    flicky.sprite = SPR_addSprite(&hero_sprite, flicky.x - FLICKY_DRAW_OFFSET, flicky.y + PLAY_Y - FLICKY_DRAW_OFFSET, TILE_ATTR(PAL2, 0, FALSE, FALSE));
     
     for (u16 h = 0; h < MAX_HISTORIAL; h++) {
         historial_x[h] = flicky.x;
         historial_y[h] = flicky.y;
     }
 
-    s16 caz_tx = 19, caz_ty = 10;
-    buscar_celda_libre(&caz_tx, &caz_ty);
-    cazador.x = caz_tx * 8; cazador.y = caz_ty * 8; cazador.x_vel = 0; cazador.y_vel = 0;
+    s16 caz_tx = MAP_WIDTH - 2, caz_ty = MAP_HEIGHT - 2;
+    for (u16 intento = 0; intento < 20; intento++) {
+        if (buscar_celda_libre(&caz_tx, &caz_ty) && (abs(caz_tx - 1) + abs(caz_ty - 1)) >= 10) break;
+    }
+    cazador.x = caz_tx * CELDA; cazador.y = caz_ty * CELDA; cazador.x_vel = 0; cazador.y_vel = 0;
     
-    cazador.sprite = SPR_addSprite(cazador_recurso, cazador.x - CAZADOR_DRAW_OFFSET, cazador.y - CAZADOR_DRAW_OFFSET, TILE_ATTR(PAL3, 0, FALSE, FALSE));
+    cazador.sprite = SPR_addSprite(cazador_recurso, cazador.x - CAZADOR_DRAW_OFFSET, cazador.y + PLAY_Y - CAZADOR_DRAW_OFFSET_Y, TILE_ATTR(PAL3, 0, FALSE, FALSE));
 
     musica_segun_estado(ESTADO_JUEGO);
+    preparados();
 }
 
 void lauch_partida() {} 
 
 void finalizar_partida() {
-    PAL_setColor(1, color_muro_original); 
+    muros_alerta(FALSE); 
     if (flicky.sprite)  { SPR_releaseSprite(flicky.sprite);  flicky.sprite = NULL; }
     if (cazador.sprite) { SPR_releaseSprite(cazador.sprite); cazador.sprite = NULL; }
     
@@ -1111,7 +1076,10 @@ void finalizar_partida() {
     shake_x = 0;
     shake_timer = 0;
     VDP_setHorizontalScroll(BG_A, 0);
+    VDP_setHorizontalScroll(BG_B, 0);
     
+    efectos_reset();
+    pantalla_sprites_reset();
     SPR_clear();
     SPR_update();
     SYS_doVBlankProcess();
@@ -1125,28 +1093,40 @@ void mostrar_pantalla_continue() {
     finalizar_partida();
     estado_actual = ESTADO_CONTINUE;
     musica_segun_estado(ESTADO_CONTINUE);
-    VDP_clearPlane(BG_A, TRUE);
-    VDP_clearPlane(BG_B, TRUE);
-    
-    PAL_setColor(1, color_muro_original);
-    
-    VDP_setTextPalette(PAL0); 
+    muros_alerta(FALSE);
+    pantalla_imagen(&bg_continue);
+    VDP_loadFont(&ts_font, DMA);
+    VDP_setTextPalette(PAL0);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
     char buf[40];
-    sprintf(buf, "CONTINUES: %d", continues_restantes);
-    VDP_drawText(buf, 14, 10);
-    VDP_drawText("PULSA START PARA SEGUIR", 8, 13);
+    sprintf(buf, T("TE QUEDAN %d CONTINUES", "%d CONTINUES LEFT"), continues_restantes);
+    texto_centrado(buf, 12);
+    pantalla_sprite(&hero_sprite, 152, 160, PAL2, ANIM_HERIDO, 0, FALSE);
+    titulo_parpadeo = TRUE;
 }
 
 void mostrar_game_over() {
     if (flicky.puntuacion > puntuacion_maxima) {
         puntuacion_maxima = flicky.puntuacion;
+        guardar_config();
     }
     finalizar_partida();
     estado_actual = ESTADO_GAMEOVER;
     VDP_clearPlane(BG_A, TRUE);
     VDP_clearPlane(BG_B, TRUE);
-    PAL_setPalette(PAL0, bg_game_over.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_game_over, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    pantalla_imagen(&bg_game_over);
+    VDP_loadFont(&ts_font, DMA);
+    VDP_setTextPalette(PAL0);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
+    {
+        char buf[40];
+        sprintf(buf, T("PUNTOS %06ld   RECORD %06ld", "SCORE %06ld   RECORD %06ld"), flicky.puntuacion, puntuacion_maxima);
+        texto_centrado(buf, 12);
+    }
+    pantalla_sprite(&hunter_sprite, 176, 152, PAL3, ANIM_LADO, 0, TRUE);
+    pantalla_sprite(&hero_sprite, 136, 160, PAL2, ANIM_HERIDO, 0, FALSE);
+    titulo_parpadeo = TRUE;
     
     musica_segun_estado(ESTADO_GAMEOVER);
     efecto_shake(10, 2);
@@ -1155,16 +1135,26 @@ void mostrar_game_over() {
 void mostrar_enhorabuena() {
     if (flicky.puntuacion > puntuacion_maxima) {
         puntuacion_maxima = flicky.puntuacion;
+        guardar_config();
     }
     finalizar_partida();
     estado_actual = ESTADO_FINJUEGO;
     VDP_clearPlane(BG_A, TRUE);
     VDP_clearPlane(BG_B, TRUE);
 
-    for(u8 i = 0; i < 4; i++) PSG_setEnvelope(i, 15);
 
-    PAL_setPalette(PAL0, bg_fin_juego.palette->data, CPU);
-    VDP_drawImageEx(BG_B, &bg_fin_juego, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    pantalla_imagen(IMG(bg_fin_juego));
+    VDP_loadFont(&ts_font, DMA);
+    VDP_setTextPalette(PAL0);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    {
+        char buf[40];
+        sprintf(buf, T("PUNTOS %06ld", "SCORE %06ld"), flicky.puntuacion);
+        texto_centrado(buf, 15);
+    }
+    pantalla_sprite(&hero_sprite, 152, 150, PAL2, ANIM_FELIZ, 0, FALSE);
+    for (u16 i = 0; i < 4; i++) pantalla_sprite(&chick_sprite, 104 + i * 32 + (i >= 2 ? 16 : 0) - (i >= 2 ? 0 : 0), 158, PAL2, 0, 0, FALSE);
+    titulo_parpadeo = TRUE;
     
     musica_segun_estado(ESTADO_FINJUEGO);
     efecto_shake(10, 2);
@@ -1184,15 +1174,24 @@ void verificar_fin_ronda_versus(bool gano_pajaro) {
         VDP_clearPlane(BG_A, TRUE);
         VDP_clearPlane(BG_B, TRUE);
 
-        for(u8 i = 0; i < 4; i++) PSG_setEnvelope(i, 15);
 
+        PAL_setPalette(PAL2, pal_items.data, CPU);
         if (victorias_pajaro >= versus_victorias_req) {
-            PAL_setPalette(PAL0, bg_pajaro_ganador.palette->data, CPU);
-            VDP_drawImageEx(BG_B, &bg_pajaro_ganador, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+            pantalla_imagen(IMG(bg_pajaro_ganador));
+            pantalla_sprite(&hero_sprite, 152, 150, PAL2, ANIM_FELIZ, 0, FALSE);
         } else {
-            PAL_setPalette(PAL0, bg_cazador_ganador.palette->data, CPU);
-            VDP_drawImageEx(BG_B, &bg_cazador_ganador, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+            pantalla_imagen(IMG(bg_cazador_ganador));
+            PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
+            pantalla_sprite(&hunter_sprite, 148, 144, PAL3, ANIM_ABAJO, 0, FALSE);
         }
+        VDP_loadFont(&ts_font, DMA);
+        VDP_setTextPalette(PAL0);
+        {
+            char buf[40];
+            sprintf(buf, T("PAJARO %ld  -  %ld CAZADOR", "BIRD %ld  -  %ld HUNTER"), victorias_pajaro, victorias_cazador);
+            texto_centrado(buf, 12);
+        }
+        titulo_parpadeo = TRUE;
         musica_segun_estado(ESTADO_FINJUEGO);
     } else {
         flicky.puntuacion = 0;
@@ -1206,21 +1205,80 @@ void verificar_fin_ronda_versus(bool gano_pajaro) {
 }
 
 bool en_zona_nido(s16 tx, s16 ty) {
-    return (ty >= NIDO_Y - 1 && ty <= NIDO_Y + 1 && tx >= NIDO_X - 1 && tx <= NIDO_X + NIDO_ANCHO);
+    return (ty >= NIDO_Y - 1 && ty <= NIDO_Y + 1 && tx >= NIDO_X - 1 && tx <= NIDO_X + NIDO_ANCHO);   // plaza central
 }
 
+// Laberinto trenzado y simétrico en rejilla de 20x13 celdas de 16x16.
+// 1) backtracker recursivo en la mitad izquierda (celdas impares), 2) se eliminan
+// la mayoría de callejones sin salida para crear bucles de escape, 3) columna central
+// y plaza del nido abiertas, 4) espejo horizontal. Siempre queda todo conectado.
 void generar_mapa_aleatorio() {
+    static s16 pila_x[64], pila_y[64];
+    static bool visitada[MAP_HEIGHT][10];
+    const s16 ddx[4] = {2, -2, 0, 0};
+    const s16 ddy[4] = {0, 0, 2, -2};
+    {   // cada nivel distinto (depende del tiempo en menús); nunca semilla nula para el xorshift
+        u16 semilla = random() ^ (u16)vtimer ^ 0xD94B;
+        setRandomSeed(semilla ? (semilla ^ 0xD94B) : 0x1234);
+    }
+
     for (u16 y = 0; y < MAP_HEIGHT; y++) {
-        for (u16 x = 0; x < MAP_WIDTH; x++) {
-            if (x == 0 || x == MAP_WIDTH - 1 || y == 0 || y == MAP_HEIGHT - 1) {
-                mapa[y][x] = TILE_MURO;
-            } else if (en_zona_nido(x, y) || (x <= 4 && y <= 3)) {
-                mapa[y][x] = TILE_SUELO;
-            } else {
-                mapa[y][x] = ((random() % 100) < 22) ? TILE_MURO : TILE_SUELO;
+        for (u16 x = 0; x < MAP_WIDTH; x++) mapa[y][x] = TILE_MURO;
+        for (u16 x = 0; x < 10; x++) visitada[y][x] = FALSE;
+    }
+
+    u16 sp = 0;
+    pila_x[sp] = 1; pila_y[sp] = 1; sp++;
+    visitada[1][1] = TRUE; mapa[1][1] = TILE_SUELO;
+    while (sp > 0) {
+        s16 x = pila_x[sp - 1], y = pila_y[sp - 1];
+        u16 opciones[4]; u16 n = 0;
+        for (u16 d = 0; d < 4; d++) {
+            s16 nx = x + ddx[d], ny = y + ddy[d];
+            if (nx >= 1 && nx <= 7 && ny >= 1 && ny <= MAP_HEIGHT - 2 && !visitada[ny][nx]) opciones[n++] = d;
+        }
+        if (n == 0) { sp--; continue; }
+        u16 d = opciones[random() % n];
+        s16 nx = x + ddx[d], ny = y + ddy[d];
+        mapa[y + ddy[d] / 2][x + ddx[d] / 2] = TILE_SUELO;
+        mapa[ny][nx] = TILE_SUELO;
+        visitada[ny][nx] = TRUE;
+        pila_x[sp] = nx; pila_y[sp] = ny; sp++;
+    }
+
+    // Trenzado: quitar callejones sin salida (70%)
+    for (s16 y = 1; y <= MAP_HEIGHT - 2; y += 2) {
+        for (s16 x = 1; x <= 7; x += 2) {
+            u16 salidas = 0;
+            if (mapa[y][x + 1] == TILE_SUELO) salidas++;
+            if (mapa[y][x - 1] == TILE_SUELO) salidas++;
+            if (mapa[y + 1][x] == TILE_SUELO) salidas++;
+            if (mapa[y - 1][x] == TILE_SUELO) salidas++;
+            if (salidas == 1 && (random() % 100) < 70) {
+                u16 opciones[4]; u16 n = 0;
+                for (u16 d = 0; d < 4; d++) {
+                    s16 mx = x + ddx[d] / 2, my = y + ddy[d] / 2;
+                    s16 tx = x + ddx[d], ty = y + ddy[d];
+                    if (mapa[my][mx] == TILE_MURO && tx > 0 && tx < MAP_WIDTH - 1 && ty > 0 && ty < MAP_HEIGHT - 1) opciones[n++] = d;
+                }
+                if (n > 0) { u16 d = opciones[random() % n]; mapa[y + ddy[d] / 2][x + ddx[d] / 2] = TILE_SUELO; }
             }
         }
     }
+
+    // Columna central (9) abierta con algún tope, conexiones desde la columna 8
+    for (s16 y = 1; y <= MAP_HEIGHT - 2; y++) {
+        mapa[y][9] = ((y % 4) == 2 && (random() & 1)) ? TILE_MURO : TILE_SUELO;
+        if (y & 1) mapa[y][8] = TILE_SUELO;
+    }
+    // Plaza del nido
+    for (s16 y = NIDO_Y - 1; y <= NIDO_Y + 1; y++) { mapa[y][8] = TILE_SUELO; mapa[y][9] = TILE_SUELO; }
+
+    // Espejo horizontal y borde
+    for (s16 y = 0; y < MAP_HEIGHT; y++)
+        for (s16 x = 0; x < 10; x++) mapa[y][MAP_WIDTH - 1 - x] = mapa[y][x];
+    for (s16 x = 0; x < MAP_WIDTH; x++) { mapa[0][x] = TILE_MURO; mapa[MAP_HEIGHT - 1][x] = TILE_MURO; }
+    for (s16 y = 0; y < MAP_HEIGHT; y++) { mapa[y][0] = TILE_MURO; mapa[y][MAP_WIDTH - 1] = TILE_MURO; }
 }
 
 void calcular_alcanzables() {
@@ -1229,7 +1287,7 @@ void calcular_alcanzables() {
             alcanzable[y][x] = FALSE;
 
     u16 inicio = 0, fin = 0;
-    s16 sx = 2, sy = 1; 
+    s16 sx = 1, sy = 1; 
 
     cola_bfs_x[fin] = sx; cola_bfs_y[fin] = sy; fin++;
     alcanzable[sy][sx] = TRUE;
@@ -1256,15 +1314,14 @@ void repartir_polluelos_seguros() {
     while (repartidos < max_polluelos_nivel && intentos < 500) {
         intentos++;
         u16 rx = (random() % (MAP_WIDTH - 2)) + 1;
-        u16 ry = (random() % (MAP_HEIGHT - 4)) + 1;
+        u16 ry = (random() % (MAP_HEIGHT - 2)) + 1;
         if (mapa[ry][rx] == TILE_SUELO && !en_zona_nido(rx, ry) && alcanzable[ry][rx]) {
             bool cerca = FALSE;
-            for (u16 i = 0; i < repartidos; i++) if (abs(posiciones_polluelos_x[i] - (s16)rx) < 3 && abs(posiciones_polluelos_y[i] - (s16)ry) < 3) cerca = TRUE;
+            for (u16 i = 0; i < repartidos; i++) if (abs(posiciones_polluelos_x[i] - (s16)rx) < 2 && abs(posiciones_polluelos_y[i] - (s16)ry) < 2) cerca = TRUE;
             if (!cerca) {
                 mapa[ry][rx] = TILE_POLLUELO;
                 posiciones_polluelos_x[repartidos] = rx;
                 posiciones_polluelos_y[repartidos] = ry;
-                VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + TILE_POLLUELO), rx, ry);
                 repartidos++;
             }
         }
@@ -1274,8 +1331,8 @@ void repartir_polluelos_seguros() {
 bool buscar_celda_libre(s16* out_x, s16* out_y) {
     for (u16 intentos = 0; intentos < 200; intentos++) {
         u16 rx = (random() % (MAP_WIDTH - 2)) + 1;
-        u16 ry = (random() % (MAP_HEIGHT - 4)) + 1;
-        if (mapa[ry][rx] == TILE_SUELO && !en_zona_nido(rx, ry) && alcanzable[ry][rx]) {
+        u16 ry = (random() % (MAP_HEIGHT - 2)) + 1;
+        if (mapa[ry][rx] == TILE_SUELO && !en_zona_nido(rx, ry) && alcanzable[ry][rx] && !(rx == (u16)((flicky.x + 8) >> CELDA_SHIFT) && ry == (u16)((flicky.y + 8) >> CELDA_SHIFT))) {
             *out_x = rx; *out_y = ry;
             return TRUE;
         }
@@ -1305,13 +1362,13 @@ void generar_powerup_aleatorio() {
     }
 
     mapa[ry][rx] = tipo;
-    VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + tipo), rx, ry);
+    dibujar_celda(rx, ry);
 }
 
 void aplicar_recorte_battle_royale() {
-    anillo_recorte += 3;
+    anillo_recorte += 1;
     en_preaviso_cierre = FALSE;
-    PAL_setColor(1, color_muro_original); 
+    muros_alerta(FALSE); 
     
     for (u16 y = 0; y < MAP_HEIGHT; y++) {
         for (u16 x = 0; x < MAP_WIDTH; x++) {
@@ -1326,32 +1383,32 @@ void aplicar_recorte_battle_royale() {
                     return;
                 }
                 mapa[y][x] = TILE_MURO;
-                VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX + TILE_MURO), x, y);
             }
         }
     }
+    dibujar_mapa_completo();
     reproducir_sonido_item(180);
 }
 
 void leer_entrada() {
     u16 value1 = JOY_readJoypad(JOY_1);
     
-    s16 flicky_offset_x = flicky.x & 7; 
-    s16 flicky_offset_y = flicky.y & 7; 
+    s16 flicky_offset_x = flicky.x & CELDA_MASK; 
+    s16 flicky_offset_y = flicky.y & CELDA_MASK; 
 
-    if ((flicky_offset_x <= 3) && (flicky_offset_y <= 3)) {
+    if ((flicky_offset_x <= 3 || flicky_offset_x >= 13) && (flicky_offset_y <= 3 || flicky_offset_y >= 13)) {
         s16 nx = 0, ny = 0;
         if (value1 & BUTTON_LEFT) nx = -1; 
         else if (value1 & BUTTON_RIGHT) nx = 1;
         else if (value1 & BUTTON_UP) ny = -1; 
         else if (value1 & BUTTON_DOWN) ny = 1;
         
-        if (nx != 0 || ny != 0) {
-            s16 tx = (flicky.x >> 3) + nx; 
-            s16 ty = (flicky.y >> 3) + ny; 
+        if ((nx != 0 || ny != 0) && (nx != flicky.x_vel || ny != flicky.y_vel)) {
+            s16 tx = ((flicky.x + 8) >> CELDA_SHIFT) + nx; 
+            s16 ty = ((flicky.y + 8) >> CELDA_SHIFT) + ny; 
             if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT && mapa[ty][tx] != TILE_MURO) {
-                flicky.x = (flicky.x >> 3) << 3; 
-                flicky.y = (flicky.y >> 3) << 3;
+                flicky.x = ((flicky.x + 8) >> CELDA_SHIFT) << CELDA_SHIFT; 
+                flicky.y = ((flicky.y + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
                 flicky.x_vel = nx; flicky.y_vel = ny;
             }
         }
@@ -1359,22 +1416,22 @@ void leer_entrada() {
 
     if (modo_jugadores == 1) {
         u16 value2 = JOY_readJoypad(JOY_2);
-        s16 cazador_offset_x = cazador.x & 7;
-        s16 cazador_offset_y = cazador.y & 7;
+        s16 cazador_offset_x = cazador.x & CELDA_MASK;
+        s16 cazador_offset_y = cazador.y & CELDA_MASK;
 
-        if ((cazador_offset_x <= 3) && (cazador_offset_y <= 3)) {
+        if ((cazador_offset_x <= 3 || cazador_offset_x >= 13) && (cazador_offset_y <= 3 || cazador_offset_y >= 13)) {
             s16 c_nx = 0, c_ny = 0;
             if (value2 & BUTTON_LEFT) c_nx = -1; 
             else if (value2 & BUTTON_RIGHT) c_nx = 1;
             else if (value2 & BUTTON_UP) c_ny = -1; 
             else if (value2 & BUTTON_DOWN) c_ny = 1;
             
-            if (c_nx != 0 || c_ny != 0) {
-                s16 c_tx = (cazador.x >> 3) + c_nx; 
-                s16 c_ty = (cazador.y >> 3) + c_ny; 
+            if ((c_nx != 0 || c_ny != 0) && (c_nx != cazador.x_vel || c_ny != cazador.y_vel)) {
+                s16 c_tx = ((cazador.x + 8) >> CELDA_SHIFT) + c_nx; 
+                s16 c_ty = ((cazador.y + 8) >> CELDA_SHIFT) + c_ny; 
                 if (c_tx >= 0 && c_tx < MAP_WIDTH && c_ty >= 0 && c_ty < MAP_HEIGHT && mapa[c_ty][c_tx] != TILE_MURO) {
-                    cazador.x = (cazador.x >> 3) << 3; 
-                    cazador.y = (cazador.y >> 3) << 3;
+                    cazador.x = ((cazador.x + 8) >> CELDA_SHIFT) << CELDA_SHIFT; 
+                    cazador.y = ((cazador.y + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
                     cazador.x_vel = c_nx; cazador.y_vel = c_ny;
                 }
             }
@@ -1383,38 +1440,43 @@ void leer_entrada() {
 }
 
 void comprobar_recogida_objetos() {
-    u16 cx = (flicky.x + 4) >> 3;
-    u16 cy = (flicky.y + 4) >> 3;
+    u16 cx = (flicky.x + 8) >> CELDA_SHIFT;
+    u16 cy = (flicky.y + 8) >> CELDA_SHIFT;
 
     if (cx < MAP_WIDTH && cy < MAP_HEIGHT) {
         u8 tipo_objeto = mapa[cy][cx];
 
         if (tipo_objeto == TILE_POLLUELO && semillas_en_fila < max_polluelos_nivel) {
             mapa[cy][cx] = TILE_SUELO; 
-            VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), cx, cy); 
-            sprites_seguidores[semillas_en_fila] = SPR_addSprite(&flicky_sprite, flicky.x - FLICKY_DRAW_OFFSET, flicky.y - FLICKY_DRAW_OFFSET, TILE_ATTR(PAL2, 0, FALSE, FALSE));
+            dibujar_celda(cx, cy); 
+            sprites_seguidores[semillas_en_fila] = SPR_addSprite(&chick_sprite, flicky.x, flicky.y + PLAY_Y, TILE_ATTR(PAL2, 0, FALSE, FALSE));
+            SPR_setAnimationLoop(sprites_seguidores[semillas_en_fila], TRUE);
             semillas_en_fila++; 
+            efecto_chispa(cx * CELDA, cy * CELDA);
             reproducir_sonido_waka();
         } 
         else if (tipo_objeto == TILE_GEMA) {
             mapa[cy][cx] = TILE_SUELO; 
-            VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), cx, cy);
+            dibujar_celda(cx, cy);
             flicky.puntuacion += 250;
+            efecto_chispa(cx * CELDA, cy * CELDA);
             reproducir_sonido_item(1400);
             efecto_shake(6, 1);
         } 
         else if (tipo_objeto == TILE_RELOJ) {
             mapa[cy][cx] = TILE_SUELO; 
-            VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), cx, cy);
+            dibujar_celda(cx, cy);
             timer_cazador_lento = DURACION_PODER_FRAMES;
             cazador_en_furia = FALSE; 
-            PAL_setColor(1, color_muro_original);
+            muros_alerta(FALSE);
+            efecto_chispa(cx * CELDA, cy * CELDA);
             reproducir_sonido_item(220);
         } 
         else if (tipo_objeto == TILE_RAYO) {
             mapa[cy][cx] = TILE_SUELO; 
-            VDP_setTileMapXY(BG_A, TILE_ATTR_FULL(PAL0, 0, 0, 0, 0), cx, cy);
+            dibujar_celda(cx, cy);
             timer_flicky_rapido = DURACION_PODER_FRAMES;
+            efecto_chispa(cx * CELDA, cy * CELDA);
             reproducir_sonido_item(900);
             efecto_shake(8, 2);
         }
@@ -1431,6 +1493,9 @@ void comprobar_recogida_objetos() {
 }
 
 void actualizar_logica() {
+    efectos_actualizar();
+    animar_polluelos_mapa();
+    cazador_tinte_actualizar();
     frame_counter++;
 
     efecto_shake_actualizar();
@@ -1447,28 +1512,17 @@ void actualizar_logica() {
     }
 
     if (modo_battle_royale && en_preaviso_cierre) {
-        if ((frame_counter & 15) < 8) { 
-            PAL_setColor(1, RGB24_TO_VDPCOLOR(0xFF0000)); 
-        } else {
-            PAL_setColor(1, color_muro_original); 
-        }
+        u16 fase = (frame_counter >> 1) & 15;
+        muros_mezcla(fase < 8 ? fase : 16 - fase);
     }
 
     if (cazador_en_furia) {
-        if ((frame_counter & 8) == 0) {
-            PAL_setColor(1, RGB24_TO_VDPCOLOR(0xFF0000));
-        } else {
-            PAL_setColor(1, color_muro_original);
-        }
+        // pulso suave (sin parpadeo brusco a pantalla completa)
+        u16 fase = (frame_counter >> 1) & 15;
+        muros_mezcla(fase < 8 ? fase : 16 - fase);
     }
 
-    if (salida_abierta) {
-        u16 safe_text_x = (anillo_recorte > 0) ? (anillo_recorte + 1) : 8;
-        u16 safe_text_y = (anillo_recorte > 0) ? (anillo_recorte + 1) : 2;
-        VDP_setTextPalette(PAL0); 
-        if ((frame_counter & 31) < 15) VDP_drawText("¡VE A LA META Y ESCAPA!", safe_text_x, safe_text_y);
-        else VDP_drawText("                       ", safe_text_x, safe_text_y);
-    }
+    // (el aviso de "meta abierta" parpadea en el marcador: ver hud_actualizar)
 
     static u8 frame_timer_60 = 0;
     frame_timer_60++;
@@ -1494,14 +1548,14 @@ void actualizar_logica() {
                     if ((random() % 100) < 12) {
                         cazador_en_furia = TRUE;
                         timer_duracion_furia = 8; // Ampliado a 8 segundos
-                        playTimeAlertSound(); 
+                        sonido_rabia();
                         efecto_shake(15, 2);
                     }
                 } else {
                     timer_duracion_furia--;
                     if (timer_duracion_furia <= 0) {
                         cazador_en_furia = FALSE;
-                        PAL_setColor(1, color_muro_original);
+                        muros_alerta(FALSE);
                     }
                 }
             }
@@ -1552,27 +1606,27 @@ void actualizar_logica() {
         if (flicky.x_vel == 0 && flicky.y_vel == 0) break;
         s16 next_x = flicky.x + flicky.x_vel;
         s16 next_y = flicky.y + flicky.y_vel;
-        s16 col_x = (flicky.x_vel > 0) ? (next_x + 7) : next_x;
-        s16 col_y = (flicky.y_vel > 0) ? (next_y + 7) : next_y;
+        s16 col_x = (flicky.x_vel > 0) ? (next_x + CELDA_MASK) : next_x;
+        s16 col_y = (flicky.y_vel > 0) ? (next_y + CELDA_MASK) : next_y;
 
-        if (mapa[col_y >> 3][col_x >> 3] != TILE_MURO) {
+        if (mapa[col_y >> CELDA_SHIFT][col_x >> CELDA_SHIFT] != TILE_MURO) {
             flicky.x = next_x;
             flicky.y = next_y;
         } else {
-            flicky.x = (flicky.x >> 3) << 3;
-            flicky.y = (flicky.y >> 3) << 3;
+            flicky.x = ((flicky.x + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
+            flicky.y = ((flicky.y + 8) >> CELDA_SHIFT) << CELDA_SHIFT;
             flicky.x_vel = 0; flicky.y_vel = 0;
         }
 
         historial_x[indice_historial] = flicky.x;
         historial_y[indice_historial] = flicky.y;
-        indice_historial = (indice_historial + 1) & 127; 
+        indice_historial = (indice_historial + 1) & HIST_MASK; 
     }
 
     comprobar_recogida_objetos();
 
-    u16 cx = flicky.x >> 3;
-    u16 cy = flicky.y >> 3;
+    u16 cx = (flicky.x + 8) >> CELDA_SHIFT;
+    u16 cy = (flicky.y + 8) >> CELDA_SHIFT;
 
     if (cx >= NIDO_X && cx <= NIDO_X + NIDO_ANCHO - 1 && cy == NIDO_Y) {
         if (semillas_en_fila > 0) {
@@ -1585,7 +1639,9 @@ void actualizar_logica() {
                 }
                 total_salvados++; 
                 reproducir_sonido_deposito(i); 
-                for(s16 d=0; d<6; d++) SYS_doVBlankProcess(); 
+                efecto_chispa((NIDO_X * CELDA) + ((i & 1) ? 16 : 0), NIDO_Y * CELDA - 4);
+                hud_actualizar();
+                for(s16 d=0; d<6; d++) { efectos_actualizar(); SPR_update(); SYS_doVBlankProcess(); }
             }
             flicky.puntuacion += (c * 100);
             efecto_shake(8, 1);
@@ -1603,6 +1659,11 @@ void actualizar_logica() {
                 return;
             } else {
                 victorias_pajaro++;
+                muros_alerta(FALSE);
+                cazador_en_furia = FALSE; timer_cazador_lento = 0; cazador_tinte_actualizar();
+                banner(T("FASE SUPERADA!", "STAGE CLEAR!"));
+                musica_detener(); XGM2_playTrack(PISTA_SUPERADA);
+                secuencia_heroe(ANIM_FELIZ, 150, TRUE);
                 if (modo_juego_seleccionada == 0) { 
                     fase_actual++;
                     if (fase_actual > 5) {
@@ -1629,12 +1690,9 @@ void actualizar_logica() {
                     }
                 } else { 
                     estado_actual = ESTADO_VICTORIA;
-                    VDP_setTextPalette(PAL0);
-                    VDP_drawText("¡HAS ESCAPADO CON EXITO!", 8, 13);
-                    PSG_setTone(2, 900);  PSG_setEnvelope(2, 2); waitMs(150);
-                    PSG_setTone(2, 1200); waitMs(150);
-                    PSG_setTone(2, 1500); waitMs(600);
-                    PSG_setEnvelope(2, 15);
+                    banner(T("HAS ESCAPADO CON EXITO!", "YOU ESCAPED!"));
+                    musica_detener(); XGM2_playTrack(PISTA_SUPERADA);
+                    for (u16 f = 0; f < 150; f++) { SPR_update(); SYS_doVBlankProcess(); }
                     finalizar_partida();
                     estado_actual = ESTADO_MENU; 
                     mostrar_menu_opciones(); 
@@ -1646,8 +1704,8 @@ void actualizar_logica() {
 
     for (u16 i = 0; i < semillas_en_fila; i++) { 
         if (sprites_seguidores[i]) {
-            s16 r = (indice_historial - 1 - ((i + 1) * 6) + MAX_HISTORIAL) & 127; 
-            SPR_setPosition(sprites_seguidores[i], historial_x[r] - FLICKY_DRAW_OFFSET, historial_y[r] - FLICKY_DRAW_OFFSET); 
+            s16 r = (indice_historial - 1 - ((i + 1) * SEPARACION_POLLUELOS) + MAX_HISTORIAL) & HIST_MASK; 
+            SPR_setPosition(sprites_seguidores[i], historial_x[r], historial_y[r] + PLAY_Y); 
         }
     }
 
@@ -1661,11 +1719,11 @@ void actualizar_logica() {
         if (cazador.x_vel != 0 || cazador.y_vel != 0) SPR_nextFrame(cazador.sprite); else SPR_setFrame(cazador.sprite, 0);
     }
     
-    SPR_setPosition(flicky.sprite, flicky.x - FLICKY_DRAW_OFFSET, flicky.y - FLICKY_DRAW_OFFSET);
+    SPR_setPosition(flicky.sprite, flicky.x - FLICKY_DRAW_OFFSET + shake_x, flicky.y + PLAY_Y - FLICKY_DRAW_OFFSET);
     mover_cazador();
 
     // ===== COLISIÓN CON CAZADOR (MECÁNICAS AJUSTADAS) =====
-    if (abs(flicky.x - cazador.x) < 8 && abs(flicky.y - cazador.y) < 8) {
+    if (abs(flicky.x - cazador.x) < 12 && abs(flicky.y - cazador.y) < 12) {
         if (flicky_invulnerable) {
             // Ignorar daño durante la inmunidad temporal
         }
@@ -1674,13 +1732,17 @@ void actualizar_logica() {
             efecto_shake(20, 3);
             reproducir_sonido_panico();
             victorias_cazador++;
-            VDP_setTextPalette(PAL0);
-            VDP_drawText("¡LA RABIA TE DESTRUYO!", 8, 13);
-            PSG_setTone(2, 180); PSG_setEnvelope(2, 2);
-            for (u16 f = 0; f < 90; f++) {
-                if (f == 40) PSG_setTone(2, 100);
-                if (f == 70) PSG_setEnvelope(2, 15);
+            muros_alerta(TRUE);
+            banner(T("LA RABIA TE DESTRUYO!", "THE HUNTER WENT BERSERK!"));
+            musica_detener();
+            sonido_atrapado();
+            SPR_setAnim(flicky.sprite, ANIM_HERIDO); flicky.anim_actual = ANIM_HERIDO; SPR_setHFlip(flicky.sprite, FALSE);
+            for (u16 f = 0; f < 100; f++) {
                 if (f < 30) efecto_shake_actualizar();
+                SPR_setFrame(flicky.sprite, (f >> 3) & 3);
+                SPR_setPosition(flicky.sprite, flicky.x + shake_x, flicky.y + PLAY_Y);
+                efectos_actualizar();
+                SPR_update();
                 SYS_doVBlankProcess();
             }
             if (continues_restantes > 0) { mostrar_pantalla_continue(); } else { mostrar_game_over(); }
@@ -1706,13 +1768,17 @@ void actualizar_logica() {
             efecto_shake(20, 3);
             reproducir_sonido_panico();
             victorias_cazador++;
-            VDP_setTextPalette(PAL0);
-            VDP_drawText("EL CAZADOR TE ATRAPO!", 8, 13);
-            PSG_setTone(2, 180); PSG_setEnvelope(2, 2);
-            for (u16 f = 0; f < 90; f++) {
-                if (f == 40) PSG_setTone(2, 100);
-                if (f == 70) PSG_setEnvelope(2, 15);
+            muros_alerta(FALSE);
+            banner(T("EL CAZADOR TE ATRAPO!", "THE HUNTER CAUGHT YOU!"));
+            musica_detener();
+            sonido_atrapado();
+            SPR_setAnim(flicky.sprite, ANIM_HERIDO); flicky.anim_actual = ANIM_HERIDO; SPR_setHFlip(flicky.sprite, FALSE);
+            for (u16 f = 0; f < 100; f++) {
                 if (f < 30) efecto_shake_actualizar();
+                SPR_setFrame(flicky.sprite, (f >> 3) & 3);
+                SPR_setPosition(flicky.sprite, flicky.x + shake_x, flicky.y + PLAY_Y);
+                efectos_actualizar();
+                SPR_update();
                 SYS_doVBlankProcess();
             }
             if (continues_restantes > 0) { mostrar_pantalla_continue(); } else { mostrar_game_over(); }
@@ -1720,21 +1786,7 @@ void actualizar_logica() {
         }
     }
 
-    char m[55];
-    u16 min = tiempo_restante_segundos / 60;
-    u16 seg = tiempo_restante_segundos - (min * 60); 
-    
-    VDP_setTextPalette(PAL0);
-    if (modo_jugadores == 1) {
-        sprintf(m, "VERSUS | P1 SCORE:%d - P2 SCORE:%d | T:%01d:%02d", (u16)victorias_pajaro, (u16)victorias_cazador, min, seg);
-    } else {
-        if (modo_juego_seleccionada == 0) {
-            sprintf(m, "W%d-L%d PTS:%05ld | T:%01d:%02d | H:%d/%d | C:%d", mundo_actual+1, fase_actual, flicky.puntuacion, min, seg, total_salvados, max_polluelos_nivel, continues_restantes);
-        } else {
-            sprintf(m, "LIBRE  PTS:%05ld | T:%01d:%02d | H:%d/%d | C:%d", flicky.puntuacion, min, seg, total_salvados, max_polluelos_nivel, continues_restantes);
-        }
-    }
-    VDP_drawText(m, 0, 27); 
+    hud_actualizar();
 }
 
 void mover_cazador() {
@@ -1764,21 +1816,23 @@ void mover_cazador() {
 
     for (u8 p = 0; p < pasos; p++) {
         if (modo_jugadores == 0) {
-            if (((cazador.x & 7) == 0) && ((cazador.y & 7) == 0)) {
-                s16 tx = cazador.x >> 3, ty = cazador.y >> 3;
+            if (((cazador.x & CELDA_MASK) == 0) && ((cazador.y & CELDA_MASK) == 0)) {
+                s16 tx = cazador.x >> CELDA_SHIFT, ty = cazador.y >> CELDA_SHIFT;
                 bool lizq = (tx > 0) && (mapa[ty][tx - 1] != TILE_MURO) && (cazador.x_vel != 1);
                 bool lder = (tx < MAP_WIDTH - 1) && (mapa[ty][tx + 1] != TILE_MURO) && (cazador.x_vel != -1);
                 bool larr = (ty > 0) && (mapa[ty - 1][tx] != TILE_MURO) && (cazador.y_vel != 1);
                 bool laba = (ty < MAP_HEIGHT - 1) && (mapa[ty + 1][tx] != TILE_MURO) && (cazador.y_vel != -1);
                 s16 ptx = tx + cazador.x_vel, pty = ty + cazador.y_vel;
-                bool blq = (ptx < 0 || ptx >= MAP_WIDTH || pty < 0 || pty >= MAP_HEIGHT || mapa[pty][ptx] == TILE_MURO);
+                // parado (al empezar o tras chocar) cuenta como bloqueado: siempre elige una dirección nueva
+                bool blq = (cazador.x_vel == 0 && cazador.y_vel == 0) ||
+                           (ptx < 0 || ptx >= MAP_WIDTH || pty < 0 || pty >= MAP_HEIGHT || mapa[pty][ptx] == TILE_MURO);
 
                 if (semillas_en_fila > 0 && ((random() & 63) < 45)) { 
                     s16 ox = 0, oy = 0;
-                    if ((flicky.x >> 3) < tx && lizq) { ox = -1; oy = 0; }
-                    else if ((flicky.x >> 3) > tx && lder) { ox = 1; oy = 0; }
-                    else if ((flicky.y >> 3) < ty && larr) { ox = 0; oy = -1; }
-                    else if ((flicky.y >> 3) > ty && laba) { ox = 0; oy = 1; }
+                    if (((flicky.x + 8) >> CELDA_SHIFT) < tx && lizq) { ox = -1; oy = 0; }
+                    else if (((flicky.x + 8) >> CELDA_SHIFT) > tx && lder) { ox = 1; oy = 0; }
+                    else if (((flicky.y + 8) >> CELDA_SHIFT) < ty && larr) { ox = 0; oy = -1; }
+                    else if (((flicky.y + 8) >> CELDA_SHIFT) > ty && laba) { ox = 0; oy = 1; }
                     if (ox != 0 || oy != 0) { cazador.x_vel = ox; cazador.y_vel = oy; blq = FALSE; }
                 }
                 if (blq || ((random() & 31) < 3)) { 
@@ -1791,21 +1845,21 @@ void mover_cazador() {
         }
 
         s16 px = cazador.x + cazador.x_vel, py = cazador.y + cazador.y_vel;
-        s16 c_col_x = (cazador.x_vel > 0) ? (px + 7) : px;
-        s16 c_col_y = (cazador.y_vel > 0) ? (py + 7) : py;
+        s16 c_col_x = (cazador.x_vel > 0) ? (px + CELDA_MASK) : px;
+        s16 c_col_y = (cazador.y_vel > 0) ? (py + CELDA_MASK) : py;
 
-        if (mapa[c_col_y >> 3][c_col_x >> 3] != TILE_MURO) { 
+        if (mapa[c_col_y >> CELDA_SHIFT][c_col_x >> CELDA_SHIFT] != TILE_MURO) { 
             cazador.x = px; cazador.y = py; 
         } else { 
-            cazador.x = (cazador.x >> 3) << 3; cazador.y = (cazador.y >> 3) << 3; 
+            cazador.x = ((cazador.x + 8) >> CELDA_SHIFT) << CELDA_SHIFT; cazador.y = ((cazador.y + 8) >> CELDA_SHIFT) << CELDA_SHIFT; 
             cazador.x_vel = 0; cazador.y_vel = 0; 
         }
     }
 
-    bool cazador_mira_izquierda = (mundo_actual == MUNDO_VOLCAN || mundo_actual == MUNDO_MARINO || mundo_actual == MUNDO_CELESTE);
+    bool cazador_mira_izquierda = FALSE;   // todos los sprites nuevos miran a la derecha
     actualizar_anim_direccion(&cazador.anim_actual, cazador.sprite, cazador.x_vel, cazador.y_vel, cazador_mira_izquierda);
     
-    SPR_setPosition(cazador.sprite, cazador.x - CAZADOR_DRAW_OFFSET, cazador.y - CAZADOR_DRAW_OFFSET);
+    SPR_setPosition(cazador.sprite, cazador.x - CAZADOR_DRAW_OFFSET + shake_x, cazador.y + PLAY_Y - CAZADOR_DRAW_OFFSET_Y);
 }
 
 void actualizar_anim_direccion(u8* a, Sprite* s, s16 xv, s16 yv, bool mirar_izquierda_por_defecto) {
@@ -1829,4 +1883,288 @@ void actualizar_anim_direccion(u8* a, Sprite* s, s16 xv, s16 yv, bool mirar_izqu
             else SPR_setHFlip(s, FALSE);
         }
     }
+}
+
+// ================= FASE 2: EFECTOS Y ANIMACIONES =================
+#define MAX_CHISPAS 6
+static Sprite* chispas[MAX_CHISPAS];
+static u8 chispa_timer[MAX_CHISPAS];
+
+void efectos_reset() {
+    // SPR_clear() solo oculta: hay que liberar los sprites de verdad
+    for (u16 i = 0; i < MAX_CHISPAS; i++) {
+        if (chispas[i]) SPR_releaseSprite(chispas[i]);
+        chispas[i] = NULL; chispa_timer[i] = 0;
+    }
+}
+
+void efecto_chispa(s16 x, s16 y) {
+    for (u16 i = 0; i < MAX_CHISPAS; i++) {
+        if (chispas[i] == NULL) {
+            chispas[i] = SPR_addSprite(&spark_sprite, x + shake_x, y + PLAY_Y, TILE_ATTR(PAL2, 1, FALSE, FALSE));
+            if (chispas[i]) { SPR_setAnimationLoop(chispas[i], FALSE); chispa_timer[i] = 16; }
+            return;
+        }
+    }
+}
+
+void efectos_actualizar() {
+    for (u16 i = 0; i < MAX_CHISPAS; i++) {
+        if (chispas[i] && --chispa_timer[i] == 0) { SPR_releaseSprite(chispas[i]); chispas[i] = NULL; }
+    }
+}
+
+// Los polluelos del mapa (plano A) se animan cambiando sus 4 tiles en VRAM
+void animar_polluelos_mapa() {
+    static u8 t = 0, f = 0;
+    if (++t < 10) return;
+    t = 0; f = (f + 1) & 3;
+    VDP_loadTileData(ts_chick_anim.tiles + f * 4 * 8, base_items, 4, DMA);
+}
+
+// Cazador: rojo en modo rabia, azulado cuando el reloj lo ralentiza
+void cazador_tinte_actualizar() {
+    static u8 tinte_actual = 0xFF;
+    u8 tinte = cazador_en_furia ? 1 : ((timer_cazador_lento > 0) ? 2 : 0);
+    if (tinte == tinte_actual || cazador.sprite == NULL) return;
+    tinte_actual = tinte;
+    const u16* src = cazador.sprite->definition->palette->data;
+    for (u16 i = 1; i < 16; i++) {
+        u16 c = src[i];
+        u16 r = (c >> 1) & 7, g = (c >> 5) & 7, b = (c >> 9) & 7;
+        if (tinte == 1) { r = (r + 4 > 7) ? 7 : r + 4; g >>= 1; b >>= 1; }
+        else if (tinte == 2) { b = (b + 3 > 7) ? 7 : b + 3; r >>= 1; }
+        PAL_setColor(48 + i, (b << 9) | (g << 5) | (r << 1));
+    }
+}
+
+// Cartel centrado sobre el laberinto (fondo de la barra del marcador)
+void banner(const char* txt) {
+    u16 len = strlen(txt);
+    u16 x0 = (40 - len) / 2 - 2, x1 = x0 + len + 3;
+    // arriba o abajo, para no tapar al protagonista
+    u16 yc = ((flicky.y + PLAY_Y) >> 3) < 15 ? 21 : 7;
+    for (u16 y = yc - 1; y <= yc + 1; y++) {
+        for (u16 x = x0; x <= x1; x++) {
+            u16 tile = base_maze + 72;
+            u16 attr = TILE_ATTR_FULL(PAL0, 1, 0, 0, tile);
+            if (y == yc + 1) attr = TILE_ATTR_FULL(PAL0, 1, 0, 0, base_maze + 73);
+            if (y == yc - 1) attr = TILE_ATTR_FULL(PAL0, 1, 1, 0, base_maze + 73);
+            VDP_setTileMapXY(BG_B, attr, x, y);
+            VDP_setTileMapXY(BG_A, 0, x, y);
+        }
+    }
+    VDP_setTextPalette(PAL0);
+    VDP_setTextPriority(1);
+    VDP_drawText(txt, (40 - len) / 2, yc);
+    VDP_setTextPriority(0);
+}
+
+// Reproduce una animación del protagonista bloqueando el juego (celebración)
+void secuencia_heroe(u8 anim, u16 frames, bool salta) {
+    if (!flicky.sprite) return;
+    static const s8 salto[8] = {0, -3, -5, -6, -6, -5, -3, 0};
+    SPR_setAnim(flicky.sprite, anim); flicky.anim_actual = anim; SPR_setHFlip(flicky.sprite, FALSE);
+    for (u16 f = 0; f < frames; f++) {
+        SPR_setFrame(flicky.sprite, (f >> 3) & 3);
+        s16 dy = salta ? salto[(f >> 1) & 7] : 0;
+        SPR_setPosition(flicky.sprite, flicky.x, flicky.y + PLAY_Y + dy);
+        if ((f & 15) == 0) efecto_chispa(flicky.x + ((f & 16) ? -10 : 10), flicky.y - 6);
+        efectos_actualizar();
+        musica_actualizar();
+        SPR_update();
+        SYS_doVBlankProcess();
+    }
+}
+
+
+// ================= FASE 4: PANTALLAS =================
+#define MAX_SPR_PANTALLA 10
+static Sprite* spr_pant[MAX_SPR_PANTALLA];
+static s16 spr_pant_x[MAX_SPR_PANTALLA], spr_pant_y[MAX_SPR_PANTALLA], spr_pant_vx[MAX_SPR_PANTALLA];
+bool titulo_parpadeo = FALSE;
+
+void pantalla_olvidar_imagen();
+void pantalla_sprites_reset() {
+    for (u16 i = 0; i < MAX_SPR_PANTALLA; i++) {
+        if (spr_pant[i]) SPR_releaseSprite(spr_pant[i]);
+        spr_pant[i] = NULL;
+    }
+}
+
+Sprite* pantalla_sprite(const SpriteDefinition* def, s16 x, s16 y, u16 pal, u16 anim, s16 vx, bool flip) {
+    for (u16 i = 0; i < MAX_SPR_PANTALLA; i++) {
+        if (spr_pant[i] == NULL) {
+            Sprite* sp = SPR_addSprite(def, x, y, TILE_ATTR(pal, 1, FALSE, flip));
+            if (!sp) return NULL;
+            SPR_setAnim(sp, anim);
+            spr_pant[i] = sp; spr_pant_x[i] = x; spr_pant_y[i] = y; spr_pant_vx[i] = vx;
+            return sp;
+        }
+    }
+    return NULL;
+}
+
+// Imagen de fondo a pantalla completa en el plano B (paleta 0) con el plano A limpio
+static const Image* imagen_actual = NULL;
+void pantalla_imagen(const Image* img) {
+    pantalla_sprites_reset();
+    if (img == imagen_actual) {          // misma pantalla (p.ej. moverse por un menú): solo se rehace el texto
+        VDP_clearPlane(BG_A, TRUE);
+        return;
+    }
+    imagen_actual = img;
+    VDP_setEnable(FALSE);
+    VDP_clearPlane(BG_A, TRUE);
+    VDP_clearPlane(BG_B, TRUE);
+    VDP_setHorizontalScroll(BG_A, 0);
+    VDP_setHorizontalScroll(BG_B, 0);
+    PAL_setPalette(PAL0, img->palette->data, CPU);
+    VDP_drawImageEx(BG_B, img, TILE_ATTR_FULL(PAL0, 0, 0, 0, TILE_USER_INDEX), 0, 0, FALSE, DMA);
+    VDP_setEnable(TRUE);
+}
+
+void pantalla_olvidar_imagen() { imagen_actual = NULL; }
+
+void texto_centrado(const char* txt, u16 y) {
+    VDP_drawText(txt, (40 - strlen(txt)) / 2, y);
+}
+
+// Animación de las pantallas: sprites que andan o se mueven en el sitio y "PULSA START" parpadeando
+void pantalla_actualizar() {
+    static u16 t = 0;
+    t++;
+    for (u16 i = 0; i < MAX_SPR_PANTALLA; i++) {
+        Sprite* sp = spr_pant[i];
+        if (!sp) continue;
+        if ((t & 7) == 0) SPR_nextFrame(sp);
+        if (spr_pant_vx[i] != 0 && (t & 1)) {
+            spr_pant_x[i] += spr_pant_vx[i];
+            if (spr_pant_x[i] > 336) spr_pant_x[i] -= 400;
+        }
+        // los polluelos dan saltitos
+        s16 dy = (sp->definition == &chick_sprite) ? (((t + i * 5) & 15) < 4 ? -2 : 0) : 0;
+        SPR_setPosition(sp, spr_pant_x[i], spr_pant_y[i] + dy);
+    }
+    if (titulo_parpadeo && (estado_actual == ESTADO_TITULO || estado_actual == ESTADO_INTRO ||
+                            estado_actual == ESTADO_CONTINUE || estado_actual == ESTADO_GAMEOVER || estado_actual == ESTADO_FINJUEGO)) {
+        u16 fila = (estado_actual == ESTADO_TITULO) ? 17 : 24;
+        if ((t & 31) == 0) texto_centrado(T("PULSA START", "PRESS START"), fila);
+        else if ((t & 31) == 20) VDP_clearText(14, fila, 12);
+    }
+}
+
+// ================= AJUSTES FINALES: IDIOMA, HISTORIA, "PREPARADOS" Y GUARDADO =================
+
+// --- Configuración en la SRAM del cartucho: idioma y récord ---
+#define SRAM_MAGIA 0xF1
+void cargar_config() {
+    SRAM_enableRO();
+    if (SRAM_readByte(0) == SRAM_MAGIA) {
+        idioma = SRAM_readByte(1) & 1;
+        puntuacion_maxima = SRAM_readLong(2);
+        if (puntuacion_maxima > 999999) puntuacion_maxima = 0;
+    }
+    SRAM_disable();
+}
+void guardar_config() {
+    SRAM_enable();
+    SRAM_writeByte(0, SRAM_MAGIA);
+    SRAM_writeByte(1, (u8)idioma);
+    SRAM_writeLong(2, puntuacion_maxima);
+    SRAM_disable();
+}
+
+// --- Selección de idioma ---
+void mostrar_idioma() {
+    pantalla_imagen(&bg_idioma);
+    VDP_loadFont(&ts_font_menu, DMA);
+    menu_paletas(&bg_idioma);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    menu_texto("IDIOMA / LANGUAGE", 11, 12, PAL1);
+    menu_opcion("CASTELLANO", 13, 15, idioma == 0);
+    menu_opcion("ENGLISH", 13, 17, idioma == 1);
+    pantalla_sprite(&hero_sprite, 152, 160, PAL2, ANIM_ABAJO, 0, FALSE);
+    musica_segun_estado(ESTADO_MENU);
+}
+
+// --- Historia tipo arcade: 4 viñetas con texto que se escribe solo ---
+static const char* const historia_es[4][2] = {
+    { "EN LO MAS PROFUNDO DEL BOSQUE, FLICKI", "CUIDABA DE SUS POLLUELOS EN EL NIDO." },
+    { "PERO UNA NOCHE LLEGO EL CAZADOR...",    "Y LOS POLLUELOS HUYERON ASUSTADOS!" },
+    { "AHORA ESTAN PERDIDOS POR BOSQUES,",     "VOLCANES, MARES Y CIELOS." },
+    { "AYUDA A FLICKI A LLEVARLOS A CASA",     "ANTES DE QUE EL CAZADOR LOS ATRAPE!" },
+};
+static const char* const historia_en[4][2] = {
+    { "DEEP IN THE FOREST, FLICKI LOOKED",     "AFTER HER LITTLE CHICKS IN THE NEST." },
+    { "BUT ONE NIGHT THE HUNTER CAME...",      "AND THE CHICKS FLED IN FRIGHT!" },
+    { "NOW THEY ARE LOST IN FORESTS,",         "VOLCANOES, SEAS AND SKIES." },
+    { "HELP FLICKI BRING THEM HOME",           "BEFORE THE HUNTER CATCHES THEM!" },
+};
+static u16 hist_panel, hist_t;
+
+static void historia_vineta(u16 n) {
+    static const Image* const fondos[4] = { &bg_hist1, &bg_hist2, &bg_hist3, &bg_hist4 };
+    hist_panel = n; hist_t = 0;
+    pantalla_imagen(fondos[n]);
+    VDP_loadFont(&ts_font_menu, DMA);
+    VDP_setTextPalette(PAL0);
+    PAL_setPalette(PAL2, pal_items.data, CPU);
+    PAL_setPalette(PAL3, hunter_sprite.palette->data, CPU);
+    switch (n) {
+        case 0:   // Flicki feliz junto al nido con sus polluelos
+            pantalla_sprite(&hero_sprite, 108, 138, PAL2, ANIM_FELIZ, 0, FALSE);
+            for (u16 i = 0; i < 3; i++) pantalla_sprite(&chick_sprite, 140 + i * 14, 140, PAL2, 0, 0, FALSE);
+            break;
+        case 1:   // llega el cazador y los polluelos salen corriendo
+            pantalla_sprite(&hunter_sprite, 330, 130, PAL3, ANIM_LADO, -1, TRUE);
+            for (u16 i = 0; i < 3; i++) pantalla_sprite(&chick_sprite, 140 + i * 14, 140, PAL2, 0, -2, FALSE);
+            pantalla_sprite(&hero_sprite, 108, 138, PAL2, ANIM_HERIDO, 0, FALSE);
+            break;
+        case 2:   // Flicki recorre el mapa de los cuatro mundos
+            pantalla_sprite(&hero_sprite, 40, 100, PAL2, ANIM_LADO, 1, FALSE);
+            break;
+        default:  // ¡a por ellos!
+            pantalla_sprite(&hero_sprite, 152, 120, PAL2, ANIM_FELIZ, 0, FALSE);
+            pantalla_sprite(&chick_sprite, 120, 126, PAL2, 0, 0, FALSE);
+            pantalla_sprite(&chick_sprite, 188, 126, PAL2, 0, 0, FALSE);
+            break;
+    }
+}
+
+void mostrar_historia() {
+    musica_detener();
+    XGM2_playTrack(PISTA_CONTINUAR);
+    historia_vineta(0);
+}
+
+void historia_actualizar() {
+    const char* const* lineas = idioma ? historia_en[hist_panel] : historia_es[hist_panel];
+    hist_t++;
+    // máquina de escribir: una letra cada 2 frames, primero una línea y luego la otra
+    u16 n0 = strlen(lineas[0]), n1 = strlen(lineas[1]);
+    u16 c = hist_t / 2;
+    if ((hist_t & 1) == 0 && c <= n0 + n1) {
+        char ch[2] = { 0, 0 };
+        if (c >= 1 && c <= n0) { ch[0] = lineas[0][c - 1]; VDP_drawText(ch, 2 + c - 1, 23); }
+        else if (c > n0) { ch[0] = lineas[1][c - n0 - 1]; VDP_drawText(ch, 2 + c - n0 - 1, 25); }
+        if (ch[0] != ' ' && ch[0] && (c & 3) == 0) SFX(sfx_click, SOUND_PCM_CH2, 0);
+    }
+    if (hist_t > (n0 + n1) * 2 + 200) {
+        if (hist_panel < 3) historia_vineta(hist_panel + 1);
+        else { estado_actual = ESTADO_TITULO; mostrar_pantalla_titulo(); }
+    }
+}
+
+// --- Pausa de "¡preparados!" al empezar cada ronda: el jugador ve el laberinto antes de que el cazador arranque ---
+void preparados() {
+    hud_actualizar();
+    banner(T("PREPARADOS...", "GET READY..."));
+    for (u16 f = 0; f < 100; f++) {
+        if (f == 70) { dibujar_mapa_completo(); banner(T("YA!", "GO!")); }
+        SPR_update();
+        SYS_doVBlankProcess();
+    }
+    dibujar_mapa_completo();
+    hud_forzar_redibujo();
 }
